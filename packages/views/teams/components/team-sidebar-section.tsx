@@ -8,6 +8,7 @@ import { useWorkspaceId } from "@multica/core/hooks";
 import { useWorkspacePaths } from "@multica/core/paths";
 import { teamListOptions } from "@multica/core/teams";
 import { projectListOptions } from "@multica/core/projects/queries";
+import { cycleListOptions } from "@multica/core/cycles/queries";
 import type { Team } from "@multica/core/types";
 import { Popover, PopoverTrigger, PopoverContent } from "@multica/ui/components/ui/popover";
 import { useModalStore } from "@multica/core/modals";
@@ -135,12 +136,15 @@ function TeamNavItem({ team }: { team: Team }) {
           >
             <ListTodo className="size-4" /> Issues
           </AppLink>
-          <AppLink
-            href={p.teamCycles(team.identifier)}
-            className="flex items-center gap-2 rounded-md px-2 py-1 pl-7 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-          >
-            <Timer className="size-4" /> Cycles
-          </AppLink>
+          <div>
+            <AppLink
+              href={p.teamCycles(team.identifier)}
+              className="flex items-center gap-2 rounded-md px-2 py-1 pl-7 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+            >
+              <Timer className="size-4" /> Cycles
+            </AppLink>
+            <CycleSidebarLinks teamId={team.id} teamIdentifier={team.identifier} />
+          </div>
           <div>
             <button
               onClick={() => setProjectsExpanded(!projectsExpanded)}
@@ -153,6 +157,38 @@ function TeamNavItem({ team }: { team: Team }) {
             {projectsExpanded && <TeamProjectsList teamId={team.id} teamIdentifier={team.identifier} />}
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+function CycleSidebarLinks({ teamId, teamIdentifier }: { teamId: string; teamIdentifier: string }) {
+  const wsId = useWorkspaceId();
+  const p = useWorkspacePaths();
+  const { data: cycles = [] } = useQuery(cycleListOptions(wsId, teamId));
+
+  const activeCycle = cycles.find((c) => c.status === "active");
+  const upcomingCycle = cycles.find((c) => c.status === "planned");
+
+  if (!activeCycle && !upcomingCycle) return null;
+
+  return (
+    <div className="ml-7 border-l border-border pl-2">
+      {activeCycle && (
+        <AppLink
+          href={p.teamCycleDetail(teamIdentifier, activeCycle.id)}
+          className="block rounded-md px-2 py-0.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+        >
+          Current
+        </AppLink>
+      )}
+      {upcomingCycle && (
+        <AppLink
+          href={p.teamCycleDetail(teamIdentifier, upcomingCycle.id)}
+          className="block rounded-md px-2 py-0.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+        >
+          Upcoming
+        </AppLink>
       )}
     </div>
   );

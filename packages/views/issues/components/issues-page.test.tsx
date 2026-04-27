@@ -257,6 +257,8 @@ const issueDefaults = {
   team_id: "team-1",
   parent_issue_id: null,
   project_id: null,
+  cycle_id: null,
+  estimate: null,
   position: 0,
 };
 

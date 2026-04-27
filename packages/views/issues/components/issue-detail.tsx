@@ -40,6 +40,8 @@ import { StatusIcon, PriorityIcon, StatusPicker, PriorityPicker, DueDatePicker, 
 import { IssueActionsDropdown, useIssueActions } from "../actions";
 import { ProjectPicker } from "../../projects/components/project-picker";
 import { LabelPicker } from "../../labels/components/label-picker";
+import { CyclePicker } from "../../cycles/components/cycle-picker";
+import { EstimatePicker } from "../../cycles/components/estimate-picker";
 import { CommentCard } from "./comment-card";
 import { CommentInput } from "./comment-input";
 import { AgentLiveCard, TaskRunHistory } from "./agent-live-card";
@@ -411,6 +413,12 @@ export function IssueDetail({ issueId, onDelete, defaultSidebarOpen = true, layo
           </PropRow>
           <PropRow label="Labels">
             <LabelPicker issueId={issue.id} labels={issue.labels} />
+          </PropRow>
+          <PropRow label="Cycle">
+            <CyclePicker cycleId={issue.cycle_id} teamId={issue.team_id} onUpdate={handleUpdateField} />
+          </PropRow>
+          <PropRow label="Estimate">
+            <EstimatePicker estimate={issue.estimate} onUpdate={handleUpdateField} />
           </PropRow>
         </div>}
       </div>
