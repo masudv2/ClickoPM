@@ -45,6 +45,7 @@ export type { Project, ProjectStatus, ProjectPriority, CreateProjectRequest, Upd
 export type { Label, LabelColor, CreateLabelRequest, UpdateLabelRequest, ListLabelsResponse } from "./label";
 export type { Team, TeamSettings, TeamMember, CreateTeamRequest, UpdateTeamRequest, ListTeamsResponse, ListTeamMembersResponse } from "./team";
 export type { PinnedItem, PinnedItemType, CreatePinRequest, ReorderPinsRequest } from "./pin";
+export type { Cycle, CycleWithProgress, CycleStatus, HistoryEntry, ScopeStats, BreakdownItem, LabelBreakdownItem, CreateCycleRequest, UpdateCycleRequest, ListCyclesResponse } from "./cycle";
 export type {
   Autopilot,
   AutopilotStatus,

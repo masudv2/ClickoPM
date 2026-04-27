@@ -38,6 +38,8 @@ export interface Issue {
   creator_id: string;
   parent_issue_id: string | null;
   project_id: string | null;
+  cycle_id: string | null;
+  estimate: number | null;
   position: number;
   due_date: string | null;
   labels?: Label[];
