@@ -44,6 +44,8 @@ type IssueResponse struct {
 	Reactions          []IssueReactionResponse `json:"reactions,omitempty"`
 	Attachments        []AttachmentResponse    `json:"attachments,omitempty"`
 	Labels             []LabelResponse         `json:"labels"`
+	CycleID            *string                 `json:"cycle_id"`
+	Estimate           *int32                  `json:"estimate"`
 }
 
 func issueToResponse(i db.Issue, issuePrefix string) IssueResponse {
@@ -68,7 +70,16 @@ func issueToResponse(i db.Issue, issuePrefix string) IssueResponse {
 		DueDate:       timestampToPtr(i.DueDate),
 		CreatedAt:     timestampToString(i.CreatedAt),
 		UpdatedAt:     timestampToString(i.UpdatedAt),
+		CycleID:       uuidToPtr(i.CycleID),
+		Estimate:      nullInt32Ptr(i.Estimate),
 	}
+}
+
+func nullInt32Ptr(v pgtype.Int4) *int32 {
+	if !v.Valid {
+		return nil
+	}
+	return &v.Int32
 }
 
 // issueListRowToResponse converts a list-query row (no description) to an IssueResponse.
@@ -846,6 +857,8 @@ type CreateIssueRequest struct {
 	TeamID             string   `json:"team_id"`
 	DueDate            *string  `json:"due_date"`
 	AttachmentIDs      []string `json:"attachment_ids,omitempty"`
+	CycleID            *string  `json:"cycle_id"`
+	Estimate           *int32   `json:"estimate"`
 }
 
 func (h *Handler) CreateIssue(w http.ResponseWriter, r *http.Request) {
@@ -962,6 +975,15 @@ func (h *Handler) CreateIssue(w http.ResponseWriter, r *http.Request) {
 	// Determine creator identity: agent (via X-Agent-ID header) or member.
 	creatorType, actualCreatorID := h.resolveActor(r, creatorID, workspaceID)
 
+	var cycleID pgtype.UUID
+	if req.CycleID != nil {
+		cycleID = parseUUID(*req.CycleID)
+	}
+	var estimate pgtype.Int4
+	if req.Estimate != nil {
+		estimate = pgtype.Int4{Int32: *req.Estimate, Valid: true}
+	}
+
 	issue, err := qtx.CreateIssue(r.Context(), db.CreateIssueParams{
 		WorkspaceID:        parseUUID(workspaceID),
 		Title:              req.Title,
@@ -978,6 +1000,8 @@ func (h *Handler) CreateIssue(w http.ResponseWriter, r *http.Request) {
 		Number:             issueNumber,
 		ProjectID:          projectID,
 		TeamID:             teamUUID,
+		CycleID:            cycleID,
+		Estimate:           estimate,
 	})
 	if err != nil {
 		slog.Warn("create issue failed", append(logger.RequestAttrs(r), "error", err, "workspace_id", workspaceID)...)
@@ -1036,6 +1060,8 @@ type UpdateIssueRequest struct {
 	DueDate            *string  `json:"due_date"`
 	ParentIssueID      *string  `json:"parent_issue_id"`
 	ProjectID          *string  `json:"project_id"`
+	CycleID            *string  `json:"cycle_id"`
+	Estimate           *int32   `json:"estimate"`
 }
 
 func (h *Handler) UpdateIssue(w http.ResponseWriter, r *http.Request) {
@@ -1072,6 +1098,8 @@ func (h *Handler) UpdateIssue(w http.ResponseWriter, r *http.Request) {
 		DueDate:       prevIssue.DueDate,
 		ParentIssueID: prevIssue.ParentIssueID,
 		ProjectID:     prevIssue.ProjectID,
+		CycleID:       prevIssue.CycleID,
+		Estimate:      prevIssue.Estimate,
 	}
 
 	// COALESCE fields — only set when explicitly provided
@@ -1160,6 +1188,20 @@ func (h *Handler) UpdateIssue(w http.ResponseWriter, r *http.Request) {
 			params.ProjectID = parseUUID(*req.ProjectID)
 		} else {
 			params.ProjectID = pgtype.UUID{Valid: false}
+		}
+	}
+	if _, ok := rawFields["cycle_id"]; ok {
+		if req.CycleID != nil {
+			params.CycleID = parseUUID(*req.CycleID)
+		} else {
+			params.CycleID = pgtype.UUID{Valid: false}
+		}
+	}
+	if _, ok := rawFields["estimate"]; ok {
+		if req.Estimate != nil {
+			params.Estimate = pgtype.Int4{Int32: *req.Estimate, Valid: true}
+		} else {
+			params.Estimate = pgtype.Int4{Valid: false}
 		}
 	}
 
@@ -1433,6 +1475,8 @@ func (h *Handler) BatchUpdateIssues(w http.ResponseWriter, r *http.Request) {
 			DueDate:       prevIssue.DueDate,
 			ParentIssueID: prevIssue.ParentIssueID,
 			ProjectID:     prevIssue.ProjectID,
+			CycleID:       prevIssue.CycleID,
+			Estimate:      prevIssue.Estimate,
 		}
 
 		if req.Updates.Title != nil {
