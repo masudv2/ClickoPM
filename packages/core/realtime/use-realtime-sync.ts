@@ -16,6 +16,7 @@ import { teamKeys } from "../teams/queries";
 import { pinKeys } from "../pins/queries";
 import { autopilotKeys } from "../autopilots/queries";
 import { runtimeKeys } from "../runtimes/queries";
+import { cycleKeys } from "../cycles/queries";
 import {
   onIssueCreated,
   onIssueUpdated,
@@ -146,6 +147,10 @@ export function useRealtimeSync(
       autopilot: () => {
         const wsId = getCurrentWsId();
         if (wsId) qc.invalidateQueries({ queryKey: autopilotKeys.all(wsId) });
+      },
+      cycle: () => {
+        const wsId = getCurrentWsId();
+        if (wsId) qc.invalidateQueries({ queryKey: cycleKeys.all(wsId) });
       },
     };
 
