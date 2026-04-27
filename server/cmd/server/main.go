@@ -251,6 +251,7 @@ func main() {
 	go runRuntimeSweeper(sweepCtx, queries, taskSvc, bus)
 	go runAutopilotScheduler(autopilotCtx, queries, autopilotSvc)
 	go runDBStatsLogger(sweepCtx, pool)
+	go runCycleSweeper(sweepCtx, queries, bus)
 
 	// Graceful shutdown
 	go func() {
