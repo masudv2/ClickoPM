@@ -21,7 +21,7 @@ export function ModalRegistry() {
     case "create-issue":
       return <CreateIssueModal onClose={close} data={data} />;
     case "create-project":
-      return <CreateProjectModal onClose={close} />;
+      return <CreateProjectModal onClose={close} data={data} />;
     case "feedback":
       return <FeedbackModal onClose={close} />;
     case "issue-set-parent":

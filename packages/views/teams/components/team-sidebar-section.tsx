@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, Plus, MoreHorizontal, Settings, Link2, LogOut, ListTodo, Timer, FolderKanban } from "lucide-react";
+import { ChevronRight, Plus, MoreHorizontal, Settings, Link2, LogOut, ListTodo, Timer, FolderKanban, FolderPlus } from "lucide-react";
 import { AppLink } from "../../navigation";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { useWorkspacePaths } from "@multica/core/paths";
@@ -10,6 +10,7 @@ import { teamListOptions } from "@multica/core/teams";
 import { projectListOptions } from "@multica/core/projects/queries";
 import type { Team } from "@multica/core/types";
 import { Popover, PopoverTrigger, PopoverContent } from "@multica/ui/components/ui/popover";
+import { useModalStore } from "@multica/core/modals";
 import { LABEL_COLOR_CONFIG } from "@multica/core/labels";
 
 function TeamIcon({ team }: { team: Team }) {
@@ -56,6 +57,7 @@ function TeamProjectsList({ teamId, teamIdentifier }: { teamId: string; teamIden
 function TeamContextMenu({ team }: { team: Team }) {
   const p = useWorkspacePaths();
   const [open, setOpen] = useState(false);
+  const openModal = useModalStore((s) => s.open);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -66,6 +68,15 @@ function TeamContextMenu({ team }: { team: Team }) {
         <MoreHorizontal className="size-4" />
       </PopoverTrigger>
       <PopoverContent className="w-48 p-1" align="start">
+        <button
+          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent transition-colors"
+          onClick={() => {
+            openModal("create-project", { team_id: team.id });
+            setOpen(false);
+          }}
+        >
+          <FolderPlus className="size-4" /> Create project
+        </button>
         <AppLink
           href={p.teamSettings(team.identifier)}
           className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent transition-colors"

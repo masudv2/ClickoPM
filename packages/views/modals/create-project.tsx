@@ -53,7 +53,7 @@ function PillButton({
   );
 }
 
-export function CreateProjectModal({ onClose }: { onClose: () => void }) {
+export function CreateProjectModal({ onClose, data }: { onClose: () => void; data?: Record<string, unknown> | null }) {
   const router = useNavigation();
   const workspace = useCurrentWorkspace();
   const workspaceName = workspace?.name;
@@ -99,6 +99,7 @@ export function CreateProjectModal({ onClose }: { onClose: () => void }) {
         priority,
         lead_type: leadType,
         lead_id: leadId,
+        team_id: data?.team_id as string | undefined,
       });
       onClose();
       toast.success("Project created");
