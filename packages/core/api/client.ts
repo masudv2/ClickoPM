@@ -75,6 +75,11 @@ import type {
   ListAutopilotsResponse,
   GetAutopilotResponse,
   ListAutopilotRunsResponse,
+  Cycle,
+  CycleWithProgress,
+  CreateCycleRequest,
+  UpdateCycleRequest,
+  ListCyclesResponse,
 } from "../types";
 import type { OnboardingCompletionPath } from "../onboarding/types";
 import { type Logger, noopLogger } from "../logger";
@@ -1146,5 +1151,45 @@ export class ApiClient {
 
   async deleteAutopilotTrigger(autopilotId: string, triggerId: string): Promise<void> {
     await this.fetch(`/api/autopilots/${autopilotId}/triggers/${triggerId}`, { method: "DELETE" });
+  }
+
+  // Cycles
+
+  async listCycles(teamId: string): Promise<ListCyclesResponse> {
+    return this.fetch(`/api/teams/${teamId}/cycles`);
+  }
+
+  async getActiveCycle(teamId: string): Promise<Cycle> {
+    return this.fetch(`/api/teams/${teamId}/cycles/active`);
+  }
+
+  async getCycle(id: string): Promise<CycleWithProgress> {
+    return this.fetch(`/api/cycles/${id}`);
+  }
+
+  async createCycle(teamId: string, data: CreateCycleRequest): Promise<Cycle> {
+    return this.fetch(`/api/teams/${teamId}/cycles`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateCycle(id: string, data: UpdateCycleRequest): Promise<Cycle> {
+    return this.fetch(`/api/cycles/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteCycle(id: string): Promise<void> {
+    await this.fetch(`/api/cycles/${id}`, { method: "DELETE" });
+  }
+
+  async startCycle(id: string): Promise<Cycle> {
+    return this.fetch(`/api/cycles/${id}/start`, { method: "POST" });
+  }
+
+  async completeCycle(id: string): Promise<Cycle> {
+    return this.fetch(`/api/cycles/${id}/complete`, { method: "POST" });
   }
 }
