@@ -26,9 +26,11 @@ WHERE id = $1 AND workspace_id = $2;
 INSERT INTO issue (
     workspace_id, title, description, status, priority,
     assignee_type, assignee_id, creator_type, creator_id,
-    parent_issue_id, position, due_date, number, project_id, team_id
+    parent_issue_id, position, due_date, number, project_id, team_id,
+    cycle_id, estimate
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
+    $16, $17
 ) RETURNING *;
 
 -- name: GetIssueByNumber :one
@@ -47,6 +49,8 @@ UPDATE issue SET
     due_date = sqlc.narg('due_date'),
     parent_issue_id = sqlc.narg('parent_issue_id'),
     project_id = sqlc.narg('project_id'),
+    cycle_id = sqlc.narg('cycle_id'),
+    estimate = sqlc.narg('estimate'),
     updated_at = now()
 WHERE id = $1
 RETURNING *;

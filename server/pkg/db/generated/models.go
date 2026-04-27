@@ -199,6 +199,26 @@ type CommentReaction struct {
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
+type Cycle struct {
+	ID                    pgtype.UUID        `json:"id"`
+	WorkspaceID           pgtype.UUID        `json:"workspace_id"`
+	TeamID                pgtype.UUID        `json:"team_id"`
+	Name                  string             `json:"name"`
+	Description           pgtype.Text        `json:"description"`
+	Number                int32              `json:"number"`
+	Status                string             `json:"status"`
+	StartsAt              pgtype.Timestamptz `json:"starts_at"`
+	EndsAt                pgtype.Timestamptz `json:"ends_at"`
+	CooldownEndsAt        pgtype.Timestamptz `json:"cooldown_ends_at"`
+	CompletedAt           pgtype.Timestamptz `json:"completed_at"`
+	ScopeHistory          []byte             `json:"scope_history"`
+	CompletedScopeHistory []byte             `json:"completed_scope_history"`
+	StartedScopeHistory   []byte             `json:"started_scope_history"`
+	Position              float32            `json:"position"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+}
+
 type DaemonConnection struct {
 	ID              pgtype.UUID        `json:"id"`
 	AgentID         pgtype.UUID        `json:"agent_id"`
@@ -270,6 +290,8 @@ type Issue struct {
 	OriginID           pgtype.UUID        `json:"origin_id"`
 	FirstExecutedAt    pgtype.Timestamptz `json:"first_executed_at"`
 	TeamID             pgtype.UUID        `json:"team_id"`
+	CycleID            pgtype.UUID        `json:"cycle_id"`
+	Estimate           pgtype.Int4        `json:"estimate"`
 }
 
 type IssueDependency struct {
