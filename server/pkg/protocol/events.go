@@ -101,4 +101,11 @@ const (
 	// Daemon events
 	EventDaemonHeartbeat = "daemon:heartbeat"
 	EventDaemonRegister  = "daemon:register"
+
+	// Cycle events
+	EventCycleCreated   = "cycle:created"
+	EventCycleUpdated   = "cycle:updated"
+	EventCycleDeleted   = "cycle:deleted"
+	EventCycleStarted   = "cycle:started"
+	EventCycleCompleted = "cycle:completed"
 )
