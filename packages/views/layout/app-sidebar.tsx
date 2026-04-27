@@ -16,7 +16,7 @@ import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } 
 import { CSS } from "@dnd-kit/utilities";
 import {
   Inbox,
-  ListTodo,
+
   Bot,
   Monitor,
   ChevronDown,
@@ -28,7 +28,7 @@ import {
   BookOpenText,
   SquarePen,
   CircleUser,
-  FolderKanban,
+
   MessageSquare,
   Loader2,
   X,
@@ -78,6 +78,7 @@ import { issueDetailOptions } from "@multica/core/issues/queries";
 import { projectDetailOptions } from "@multica/core/projects/queries";
 import type { PinnedItem } from "@multica/core/types";
 import { useLogout } from "../auth";
+import { TeamSidebarSection } from "../teams/components/team-sidebar-section";
 
 // Stable empty arrays for query defaults. Using an inline `= []` default on
 // `useQuery` creates a new array reference on every render when `data` is
@@ -112,8 +113,6 @@ const personalNav: { key: NavKey; label: string; icon: typeof Inbox }[] = [
 ];
 
 const workspaceNav: { key: NavKey; label: string; icon: typeof Inbox }[] = [
-  { key: "issues", label: "Issues", icon: ListTodo },
-  { key: "projects", label: "Projects", icon: FolderKanban },
   { key: "autopilots", label: "Autopilot", icon: Zap },
   { key: "agents", label: "Agents", icon: Bot },
 ];
@@ -646,6 +645,12 @@ export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }
               </SidebarGroup>
             </Collapsible>
           )}
+
+          <SidebarGroup>
+            <SidebarGroupContent>
+              <TeamSidebarSection />
+            </SidebarGroupContent>
+          </SidebarGroup>
 
           <SidebarGroup>
             <SidebarGroupLabel>Workspace</SidebarGroupLabel>

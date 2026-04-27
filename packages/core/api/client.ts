@@ -56,6 +56,15 @@ import type {
   PinnedItemType,
   ReorderPinsRequest,
   Invitation,
+  Label,
+  CreateLabelRequest,
+  UpdateLabelRequest,
+  ListLabelsResponse,
+  Team,
+  CreateTeamRequest,
+  UpdateTeamRequest,
+  ListTeamsResponse,
+  ListTeamMembersResponse,
   Autopilot,
   AutopilotTrigger,
   AutopilotRun,
@@ -363,6 +372,7 @@ export class ApiClient {
     if (params?.assignee_ids?.length) search.set("assignee_ids", params.assignee_ids.join(","));
     if (params?.creator_id) search.set("creator_id", params.creator_id);
     if (params?.project_id) search.set("project_id", params.project_id);
+    if (params?.team_id) search.set("team_id", params.team_id);
     if (params?.open_only) search.set("open_only", "true");
     return this.fetch(`/api/issues?${search}`);
   }
@@ -950,9 +960,10 @@ export class ApiClient {
   }
 
   // Projects
-  async listProjects(params?: { status?: string }): Promise<ListProjectsResponse> {
+  async listProjects(params?: { status?: string; team_id?: string }): Promise<ListProjectsResponse> {
     const search = new URLSearchParams();
     if (params?.status) search.set("status", params.status);
+    if (params?.team_id) search.set("team_id", params.team_id);
     return this.fetch(`/api/projects?${search}`);
   }
 
@@ -976,6 +987,84 @@ export class ApiClient {
 
   async deleteProject(id: string): Promise<void> {
     await this.fetch(`/api/projects/${id}`, { method: "DELETE" });
+  }
+
+  // Labels
+  async listLabels(): Promise<ListLabelsResponse> {
+    return this.fetch("/api/labels");
+  }
+
+  async createLabel(data: CreateLabelRequest): Promise<Label> {
+    return this.fetch("/api/labels", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateLabel(id: string, data: UpdateLabelRequest): Promise<Label> {
+    return this.fetch(`/api/labels/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteLabel(id: string): Promise<void> {
+    await this.fetch(`/api/labels/${id}`, { method: "DELETE" });
+  }
+
+  async listIssueLabels(issueId: string): Promise<Label[]> {
+    return this.fetch(`/api/issues/${issueId}/labels`);
+  }
+
+  async setIssueLabels(issueId: string, labelIds: string[]): Promise<void> {
+    await this.fetch(`/api/issues/${issueId}/labels`, {
+      method: "PUT",
+      body: JSON.stringify({ label_ids: labelIds }),
+    });
+  }
+
+  // Teams
+  async listTeams(): Promise<ListTeamsResponse> {
+    return this.fetch("/api/teams");
+  }
+
+  async getTeam(id: string): Promise<Team> {
+    return this.fetch(`/api/teams/${id}`);
+  }
+
+  async createTeam(data: CreateTeamRequest): Promise<Team> {
+    return this.fetch("/api/teams", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateTeam(id: string, data: UpdateTeamRequest): Promise<Team> {
+    return this.fetch(`/api/teams/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteTeam(id: string): Promise<void> {
+    await this.fetch(`/api/teams/${id}`, { method: "DELETE" });
+  }
+
+  async listTeamMembers(teamId: string): Promise<ListTeamMembersResponse> {
+    return this.fetch(`/api/teams/${teamId}/members`);
+  }
+
+  async addTeamMember(teamId: string, memberId: string): Promise<void> {
+    await this.fetch(`/api/teams/${teamId}/members`, {
+      method: "POST",
+      body: JSON.stringify({ member_id: memberId }),
+    });
+  }
+
+  async removeTeamMember(teamId: string, memberId: string): Promise<void> {
+    await this.fetch(`/api/teams/${teamId}/members/${memberId}`, {
+      method: "DELETE",
+    });
   }
 
   // Pins

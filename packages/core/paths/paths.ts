@@ -22,6 +22,13 @@ function workspaceScoped(slug: string) {
     issueDetail: (id: string) => `${ws}/issues/${encode(id)}`,
     projects: () => `${ws}/projects`,
     projectDetail: (id: string) => `${ws}/projects/${encode(id)}`,
+    // Team-scoped paths
+    teamIssues: (identifier: string) => `${ws}/team/${encode(identifier)}/issues`,
+    teamIssueDetail: (identifier: string, id: string) => `${ws}/team/${encode(identifier)}/issues/${encode(id)}`,
+    teamProjects: (identifier: string) => `${ws}/team/${encode(identifier)}/projects`,
+    teamProjectDetail: (identifier: string, id: string) => `${ws}/team/${encode(identifier)}/projects/${encode(id)}`,
+    teamCycles: (identifier: string) => `${ws}/team/${encode(identifier)}/cycles`,
+    teamSettings: (identifier: string) => `${ws}/team/${encode(identifier)}/settings`,
     autopilots: () => `${ws}/autopilots`,
     autopilotDetail: (id: string) => `${ws}/autopilots/${encode(id)}`,
     agents: () => `${ws}/agents`,

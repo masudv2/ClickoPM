@@ -15,6 +15,7 @@ import { useCurrentWorkspace } from "@multica/core/paths";
 import { WorkspaceAvatar } from "../../workspace/workspace-avatar";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { issueListOptions, childIssueProgressOptions } from "@multica/core/issues/queries";
+import { teamListOptions } from "@multica/core/teams";
 import { useUpdateIssue } from "@multica/core/issues/mutations";
 import { useIssueSelectionStore } from "@multica/core/issues/stores/selection-store";
 import { PageHeader } from "../../layout/page-header";
@@ -23,9 +24,11 @@ import { BoardView } from "./board-view";
 import { ListView } from "./list-view";
 import { BatchActionToolbar } from "./batch-action-toolbar";
 
-export function IssuesPage() {
+export function IssuesPage({ teamIdentifier }: { teamIdentifier?: string } = {}) {
   const wsId = useWorkspaceId();
-  const { data: allIssues = [], isLoading: loading } = useQuery(issueListOptions(wsId));
+  const { data: teams = [] } = useQuery({ ...teamListOptions(wsId), enabled: !!teamIdentifier });
+  const teamId = teamIdentifier ? teams.find((t) => t.identifier.toLowerCase() === teamIdentifier.toLowerCase())?.id : undefined;
+  const { data: allIssues = [], isLoading: loading } = useQuery(issueListOptions(wsId, teamId));
 
   const workspace = useCurrentWorkspace();
   const scope = useIssuesScopeStore((s) => s.scope);
@@ -138,13 +141,21 @@ export function IssuesPage() {
 
   return (
     <div className="flex flex-1 min-h-0 flex-col">
-      {/* Header 1: Workspace breadcrumb */}
+      {/* Header 1: Workspace/Team breadcrumb */}
       <PageHeader className="gap-1.5">
         <WorkspaceAvatar name={workspace?.name ?? "W"} size="sm" />
         <span className="text-sm text-muted-foreground">
           {workspace?.name ?? "Workspace"}
         </span>
         <ChevronRight className="h-3 w-3 text-muted-foreground" />
+        {teamIdentifier && (
+          <>
+            <span className="text-sm text-muted-foreground">
+              {teams.find((t) => t.identifier.toLowerCase() === teamIdentifier.toLowerCase())?.name ?? teamIdentifier}
+            </span>
+            <ChevronRight className="h-3 w-3 text-muted-foreground" />
+          </>
+        )}
         <span className="text-sm font-medium">Issues</span>
       </PageHeader>
 

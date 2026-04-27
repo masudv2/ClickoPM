@@ -21,6 +21,7 @@ import { useViewStore } from "@multica/core/issues/stores/view-store-context";
 import { ProgressRing } from "./progress-ring";
 import type { ChildProgress } from "./list-row";
 import { IssueActionsContextMenu } from "../actions";
+import { LabelPill } from "../../labels/components/label-pill";
 
 function formatDate(date: string): string {
   return new Date(date).toLocaleDateString("en-US", {
@@ -104,6 +105,18 @@ export const BoardCardContent = memo(function BoardCardContent({
               <span aria-hidden="true" className="shrink-0">{project!.icon || "📁"}</span>
               <span className="truncate">{project!.title}</span>
             </span>
+          )}
+        </div>
+      )}
+
+      {/* Labels */}
+      {issue.labels && issue.labels.length > 0 && (
+        <div className="mt-1.5 flex items-center gap-1 flex-wrap">
+          {issue.labels.slice(0, 3).map((l) => (
+            <LabelPill key={l.id} label={l} />
+          ))}
+          {issue.labels.length > 3 && (
+            <span className="text-[11px] text-muted-foreground">+{issue.labels.length - 3}</span>
           )}
         </div>
       )}

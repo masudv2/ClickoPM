@@ -38,10 +38,10 @@ func TestGetRuntimeUsage_BucketsByUsageTime(t *testing.T) {
 	// Create an issue for the tasks to reference.
 	var issueID string
 	if err := testPool.QueryRow(ctx, `
-		INSERT INTO issue (workspace_id, title, creator_id, creator_type)
-		VALUES ($1, 'runtime usage test', $2, 'member')
+		INSERT INTO issue (workspace_id, team_id, title, creator_id, creator_type)
+		VALUES ($1, $3, 'runtime usage test', $2, 'member')
 		RETURNING id
-	`, testWorkspaceID, testUserID).Scan(&issueID); err != nil {
+	`, testWorkspaceID, testUserID, testTeamID).Scan(&issueID); err != nil {
 		t.Fatalf("create issue: %v", err)
 	}
 	t.Cleanup(func() {

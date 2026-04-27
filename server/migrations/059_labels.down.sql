@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS issue_label;
+DROP TABLE IF EXISTS label;

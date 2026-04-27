@@ -18,7 +18,8 @@ func TestSubscriberAPI(t *testing.T) {
 		t.Helper()
 		w := httptest.NewRecorder()
 		req := newRequest("POST", "/api/issues?workspace_id="+testWorkspaceID, map[string]any{
-			"title": "Subscriber test issue",
+			"title":   "Subscriber test issue",
+			"team_id": testTeamID,
 		})
 		testHandler.CreateIssue(w, req)
 		if w.Code != http.StatusCreated {

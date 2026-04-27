@@ -282,6 +282,8 @@ func NewRouter(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus, analytics
 					r.Delete("/reactions", h.RemoveIssueReaction)
 					r.Get("/attachments", h.ListAttachments)
 					r.Get("/children", h.ListChildIssues)
+					r.Get("/labels", h.ListIssueLabels)
+					r.Put("/labels", h.SetIssueLabels)
 				})
 			})
 
@@ -297,6 +299,30 @@ func NewRouter(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus, analytics
 					r.Get("/", h.GetProject)
 					r.Put("/", h.UpdateProject)
 					r.Delete("/", h.DeleteProject)
+				})
+			})
+
+			// Labels
+			r.Route("/api/labels", func(r chi.Router) {
+				r.Get("/", h.ListLabels)
+				r.Post("/", h.CreateLabel)
+				r.Route("/{id}", func(r chi.Router) {
+					r.Put("/", h.UpdateLabel)
+					r.Delete("/", h.DeleteLabel)
+				})
+			})
+
+			// Teams
+			r.Route("/api/teams", func(r chi.Router) {
+				r.Get("/", h.ListTeams)
+				r.Post("/", h.CreateTeam)
+				r.Route("/{id}", func(r chi.Router) {
+					r.Get("/", h.GetTeam)
+					r.Put("/", h.UpdateTeam)
+					r.Delete("/", h.DeleteTeam)
+					r.Get("/members", h.ListTeamMembers)
+					r.Post("/members", h.AddTeamMember)
+					r.Delete("/members/{memberId}", h.RemoveTeamMember)
 				})
 			})
 

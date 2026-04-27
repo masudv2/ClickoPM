@@ -5,6 +5,7 @@ export type ProjectPriority = "urgent" | "high" | "medium" | "low" | "none";
 export interface Project {
   id: string;
   workspace_id: string;
+  team_id: string;
   title: string;
   description: string | null;
   icon: string | null;
@@ -26,6 +27,7 @@ export interface CreateProjectRequest {
   priority?: ProjectPriority;
   lead_type?: "member" | "agent";
   lead_id?: string;
+  team_id?: string;
 }
 
 export interface UpdateProjectRequest {

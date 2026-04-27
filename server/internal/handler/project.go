@@ -19,6 +19,7 @@ import (
 type ProjectResponse struct {
 	ID          string  `json:"id"`
 	WorkspaceID string  `json:"workspace_id"`
+	TeamID      string  `json:"team_id"`
 	Title       string  `json:"title"`
 	Description *string `json:"description"`
 	Icon        *string `json:"icon"`
@@ -36,6 +37,7 @@ func projectToResponse(p db.Project) ProjectResponse {
 	return ProjectResponse{
 		ID:          uuidToString(p.ID),
 		WorkspaceID: uuidToString(p.WorkspaceID),
+		TeamID:      uuidToString(p.TeamID),
 		Title:       p.Title,
 		Description: textToPtr(p.Description),
 		Icon:        textToPtr(p.Icon),
@@ -64,6 +66,7 @@ type CreateProjectRequest struct {
 	Priority    string  `json:"priority"`
 	LeadType    *string `json:"lead_type"`
 	LeadID      *string `json:"lead_id"`
+	TeamID      string  `json:"team_id"`
 }
 
 type UpdateProjectRequest struct {
@@ -86,10 +89,15 @@ func (h *Handler) ListProjects(w http.ResponseWriter, r *http.Request) {
 	if p := r.URL.Query().Get("priority"); p != "" {
 		priorityFilter = pgtype.Text{String: p, Valid: true}
 	}
+	var teamFilter pgtype.UUID
+	if t := r.URL.Query().Get("team_id"); t != "" {
+		teamFilter = parseUUID(t)
+	}
 	projects, err := h.Queries.ListProjects(r.Context(), db.ListProjectsParams{
 		WorkspaceID: parseUUID(workspaceID),
 		Status:      statusFilter,
 		Priority:    priorityFilter,
+		TeamID:      teamFilter,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list projects")
@@ -168,6 +176,19 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 	if req.LeadID != nil {
 		leadID = parseUUID(*req.LeadID)
 	}
+	// Resolve team_id: if not provided, use first team in workspace.
+	var teamUUID pgtype.UUID
+	if req.TeamID != "" {
+		teamUUID = parseUUID(req.TeamID)
+	} else {
+		teams, err := h.Queries.ListTeams(r.Context(), parseUUID(workspaceID))
+		if err != nil || len(teams) == 0 {
+			writeError(w, http.StatusBadRequest, "team_id is required")
+			return
+		}
+		teamUUID = teams[0].ID
+	}
+
 	project, err := h.Queries.CreateProject(r.Context(), db.CreateProjectParams{
 		WorkspaceID: parseUUID(workspaceID),
 		Title:       req.Title,
@@ -177,6 +198,7 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 		LeadType:    leadType,
 		LeadID:      leadID,
 		Priority:    priority,
+		TeamID:      teamUUID,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to create project")

@@ -24,6 +24,7 @@ import (
 type IssueResponse struct {
 	ID                 string                  `json:"id"`
 	WorkspaceID        string                  `json:"workspace_id"`
+	TeamID             string                  `json:"team_id"`
 	Number             int32                   `json:"number"`
 	Identifier         string                  `json:"identifier"`
 	Title              string                  `json:"title"`
@@ -42,6 +43,7 @@ type IssueResponse struct {
 	UpdatedAt          string                  `json:"updated_at"`
 	Reactions          []IssueReactionResponse `json:"reactions,omitempty"`
 	Attachments        []AttachmentResponse    `json:"attachments,omitempty"`
+	Labels             []LabelResponse         `json:"labels"`
 }
 
 func issueToResponse(i db.Issue, issuePrefix string) IssueResponse {
@@ -49,6 +51,7 @@ func issueToResponse(i db.Issue, issuePrefix string) IssueResponse {
 	return IssueResponse{
 		ID:            uuidToString(i.ID),
 		WorkspaceID:   uuidToString(i.WorkspaceID),
+		TeamID:        uuidToString(i.TeamID),
 		Number:        i.Number,
 		Identifier:    identifier,
 		Title:         i.Title,
@@ -74,6 +77,7 @@ func issueListRowToResponse(i db.ListIssuesRow, issuePrefix string) IssueRespons
 	return IssueResponse{
 		ID:            uuidToString(i.ID),
 		WorkspaceID:   uuidToString(i.WorkspaceID),
+		TeamID:        uuidToString(i.TeamID),
 		Number:        i.Number,
 		Identifier:    identifier,
 		Title:         i.Title,
@@ -98,6 +102,7 @@ func openIssueRowToResponse(i db.ListOpenIssuesRow, issuePrefix string) IssueRes
 	return IssueResponse{
 		ID:            uuidToString(i.ID),
 		WorkspaceID:   uuidToString(i.WorkspaceID),
+		TeamID:        uuidToString(i.TeamID),
 		Number:        i.Number,
 		Identifier:    identifier,
 		Title:         i.Title,
@@ -534,11 +539,11 @@ func (h *Handler) SearchIssues(w http.ResponseWriter, r *http.Request) {
 		total = results[0].totalCount
 	}
 
-	prefix := h.getIssuePrefix(ctx, wsUUID)
+	searchPrefixMap := h.teamPrefixMap(ctx, wsUUID)
 	resp := make([]SearchIssueResponse, len(results))
 	for i, sr := range results {
 		sir := SearchIssueResponse{
-			IssueResponse: issueToResponse(sr.issue, prefix),
+			IssueResponse: issueToResponse(sr.issue, searchPrefixMap[uuidToString(sr.issue.TeamID)]),
 			MatchSource:   sr.matchSource,
 		}
 		if sr.matchSource == "comment" && sr.matchedCommentContent != "" {
@@ -586,6 +591,12 @@ func (h *Handler) ListIssues(w http.ResponseWriter, r *http.Request) {
 	if p := r.URL.Query().Get("project_id"); p != "" {
 		projectFilter = parseUUID(p)
 	}
+	var teamFilter pgtype.UUID
+	if t := r.URL.Query().Get("team_id"); t != "" {
+		teamFilter = parseUUID(t)
+	}
+
+	prefixMap := h.teamPrefixMap(ctx, wsUUID)
 
 	// open_only=true returns all non-done/cancelled issues (no limit).
 	if r.URL.Query().Get("open_only") == "true" {
@@ -596,16 +607,44 @@ func (h *Handler) ListIssues(w http.ResponseWriter, r *http.Request) {
 			AssigneeIds: assigneeIdsFilter,
 			CreatorID:   creatorFilter,
 			ProjectID:   projectFilter,
+			TeamID:      teamFilter,
 		})
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to list issues")
 			return
 		}
 
-		prefix := h.getIssuePrefix(ctx, wsUUID)
 		resp := make([]IssueResponse, len(issues))
+		openIDs := make([]pgtype.UUID, len(issues))
 		for i, issue := range issues {
+			prefix := prefixMap[uuidToString(issue.TeamID)]
 			resp[i] = openIssueRowToResponse(issue, prefix)
+			openIDs[i] = issue.ID
+		}
+
+		// Batch-fetch labels.
+		if len(openIDs) > 0 {
+			labelRows, err := h.Queries.ListIssueLabelsForIssues(ctx, openIDs)
+			if err == nil {
+				labelMap := make(map[string][]LabelResponse)
+				for _, lr := range labelRows {
+					key := uuidToString(lr.IssueID)
+					labelMap[key] = append(labelMap[key], LabelResponse{
+						ID:          uuidToString(lr.ID),
+						WorkspaceID: uuidToString(lr.WorkspaceID),
+						Name:        lr.Name,
+						Color:       lr.Color,
+						Position:    float64(lr.Position),
+						CreatedAt:   timestampToString(lr.CreatedAt),
+						UpdatedAt:   timestampToString(lr.UpdatedAt),
+					})
+				}
+				for i := range resp {
+					if labels, ok := labelMap[resp[i].ID]; ok {
+						resp[i].Labels = labels
+					}
+				}
+			}
 		}
 
 		writeJSON(w, http.StatusOK, map[string]any{
@@ -643,6 +682,7 @@ func (h *Handler) ListIssues(w http.ResponseWriter, r *http.Request) {
 		AssigneeIds: assigneeIdsFilter,
 		CreatorID:   creatorFilter,
 		ProjectID:   projectFilter,
+		TeamID:      teamFilter,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list issues")
@@ -658,15 +698,43 @@ func (h *Handler) ListIssues(w http.ResponseWriter, r *http.Request) {
 		AssigneeIds: assigneeIdsFilter,
 		CreatorID:   creatorFilter,
 		ProjectID:   projectFilter,
+		TeamID:      teamFilter,
 	})
 	if err != nil {
 		total = int64(len(issues))
 	}
 
-	prefix := h.getIssuePrefix(ctx, wsUUID)
 	resp := make([]IssueResponse, len(issues))
+	issueIDs := make([]pgtype.UUID, len(issues))
 	for i, issue := range issues {
+		prefix := prefixMap[uuidToString(issue.TeamID)]
 		resp[i] = issueListRowToResponse(issue, prefix)
+		issueIDs[i] = issue.ID
+	}
+
+	// Batch-fetch labels for all issues.
+	if len(issueIDs) > 0 {
+		labelRows, err := h.Queries.ListIssueLabelsForIssues(ctx, issueIDs)
+		if err == nil {
+			labelMap := make(map[string][]LabelResponse)
+			for _, lr := range labelRows {
+				key := uuidToString(lr.IssueID)
+				labelMap[key] = append(labelMap[key], LabelResponse{
+					ID:          uuidToString(lr.ID),
+					WorkspaceID: uuidToString(lr.WorkspaceID),
+					Name:        lr.Name,
+					Color:       lr.Color,
+					Position:    float64(lr.Position),
+					CreatedAt:   timestampToString(lr.CreatedAt),
+					UpdatedAt:   timestampToString(lr.UpdatedAt),
+				})
+			}
+			for i := range resp {
+				if labels, ok := labelMap[resp[i].ID]; ok {
+					resp[i].Labels = labels
+				}
+			}
+		}
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -681,7 +749,7 @@ func (h *Handler) GetIssue(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	prefix := h.getIssuePrefix(r.Context(), issue.WorkspaceID)
+	prefix := h.getTeamIssuePrefix(r.Context(), issue.TeamID)
 	resp := issueToResponse(issue, prefix)
 
 	// Fetch issue reactions.
@@ -705,6 +773,15 @@ func (h *Handler) GetIssue(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Fetch labels.
+	labelRows, err := h.Queries.ListIssueLabels(r.Context(), issue.ID)
+	if err == nil {
+		resp.Labels = make([]LabelResponse, len(labelRows))
+		for i, l := range labelRows {
+			resp.Labels[i] = labelToResponse(l)
+		}
+	}
+
 	writeJSON(w, http.StatusOK, resp)
 }
 
@@ -719,10 +796,10 @@ func (h *Handler) ListChildIssues(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to list child issues")
 		return
 	}
-	prefix := h.getIssuePrefix(r.Context(), issue.WorkspaceID)
+	childPrefixMap := h.teamPrefixMap(r.Context(), issue.WorkspaceID)
 	resp := make([]IssueResponse, len(children))
 	for i, child := range children {
-		resp[i] = issueToResponse(child, prefix)
+		resp[i] = issueToResponse(child, childPrefixMap[uuidToString(child.TeamID)])
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"issues": resp,
@@ -766,6 +843,7 @@ type CreateIssueRequest struct {
 	AssigneeID         *string  `json:"assignee_id"`
 	ParentIssueID      *string  `json:"parent_issue_id"`
 	ProjectID          *string  `json:"project_id"`
+	TeamID             string   `json:"team_id"`
 	DueDate            *string  `json:"due_date"`
 	AttachmentIDs      []string `json:"attachment_ids,omitempty"`
 }
@@ -851,7 +929,20 @@ func (h *Handler) CreateIssue(w http.ResponseWriter, r *http.Request) {
 		dueDate = pgtype.Timestamptz{Time: t, Valid: true}
 	}
 
-	// Use a transaction to atomically increment the workspace issue counter
+	// Resolve team_id: if not provided, use first team in workspace.
+	var teamUUID pgtype.UUID
+	if req.TeamID != "" {
+		teamUUID = parseUUID(req.TeamID)
+	} else {
+		teams, err := h.Queries.ListTeams(r.Context(), parseUUID(workspaceID))
+		if err != nil || len(teams) == 0 {
+			writeError(w, http.StatusBadRequest, "team_id is required")
+			return
+		}
+		teamUUID = teams[0].ID
+	}
+
+	// Use a transaction to atomically increment the team issue counter
 	// and create the issue with the assigned number.
 	tx, err := h.TxStarter.Begin(r.Context())
 	if err != nil {
@@ -861,9 +952,9 @@ func (h *Handler) CreateIssue(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback(r.Context())
 
 	qtx := h.Queries.WithTx(tx)
-	issueNumber, err := qtx.IncrementIssueCounter(r.Context(), parseUUID(workspaceID))
+	issueNumber, err := qtx.IncrementTeamIssueCounter(r.Context(), teamUUID)
 	if err != nil {
-		slog.Warn("increment issue counter failed", append(logger.RequestAttrs(r), "error", err, "workspace_id", workspaceID)...)
+		slog.Warn("increment team issue counter failed", append(logger.RequestAttrs(r), "error", err, "workspace_id", workspaceID)...)
 		writeError(w, http.StatusInternalServerError, "failed to create issue")
 		return
 	}
@@ -886,6 +977,7 @@ func (h *Handler) CreateIssue(w http.ResponseWriter, r *http.Request) {
 		DueDate:            dueDate,
 		Number:             issueNumber,
 		ProjectID:          projectID,
+		TeamID:             teamUUID,
 	})
 	if err != nil {
 		slog.Warn("create issue failed", append(logger.RequestAttrs(r), "error", err, "workspace_id", workspaceID)...)
@@ -903,7 +995,7 @@ func (h *Handler) CreateIssue(w http.ResponseWriter, r *http.Request) {
 		h.linkAttachmentsByIssueIDs(r.Context(), issue.ID, issue.WorkspaceID, req.AttachmentIDs)
 	}
 
-	prefix := h.getIssuePrefix(r.Context(), issue.WorkspaceID)
+	prefix := h.getTeamIssuePrefix(r.Context(), issue.TeamID)
 	resp := issueToResponse(issue, prefix)
 
 	// Fetch linked attachments so they appear in the response.
@@ -1090,7 +1182,7 @@ func (h *Handler) UpdateIssue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	prefix := h.getIssuePrefix(r.Context(), issue.WorkspaceID)
+	prefix := h.getTeamIssuePrefix(r.Context(), issue.TeamID)
 	resp := issueToResponse(issue, prefix)
 	slog.Info("issue updated", append(logger.RequestAttrs(r), "issue_id", id, "workspace_id", workspaceID)...)
 
@@ -1447,7 +1539,7 @@ func (h *Handler) BatchUpdateIssues(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		prefix := h.getIssuePrefix(r.Context(), issue.WorkspaceID)
+		prefix := h.getTeamIssuePrefix(r.Context(), issue.TeamID)
 		resp := issueToResponse(issue, prefix)
 		actorType, actorID := h.resolveActor(r, userID, workspaceID)
 

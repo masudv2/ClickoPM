@@ -45,7 +45,7 @@ export function flattenIssueBuckets(data: ListIssuesCache) {
   return out;
 }
 
-async function fetchFirstPages(filter: MyIssuesFilter = {}): Promise<ListIssuesCache> {
+async function fetchFirstPages(filter: Partial<ListIssuesParams> = {}): Promise<ListIssuesCache> {
   const responses = await Promise.all(
     PAGINATED_STATUSES.map((status) =>
       api.listIssues({ status, limit: ISSUE_PAGE_SIZE, offset: 0, ...filter }),
@@ -68,10 +68,10 @@ async function fetchFirstPages(filter: MyIssuesFilter = {}): Promise<ListIssuesC
  * Fetches the first page of each paginated status in parallel. Use
  * {@link useLoadMoreByStatus} to paginate a specific status into the cache.
  */
-export function issueListOptions(wsId: string) {
+export function issueListOptions(wsId: string, teamId?: string) {
   return queryOptions({
-    queryKey: issueKeys.list(wsId),
-    queryFn: () => fetchFirstPages(),
+    queryKey: teamId ? [...issueKeys.list(wsId), "team", teamId] : issueKeys.list(wsId),
+    queryFn: () => fetchFirstPages(teamId ? { team_id: teamId } : {}),
     select: flattenIssueBuckets,
   });
 }

@@ -8,10 +8,10 @@ export const projectKeys = {
     [...projectKeys.all(wsId), "detail", id] as const,
 };
 
-export function projectListOptions(wsId: string) {
+export function projectListOptions(wsId: string, teamId?: string) {
   return queryOptions({
-    queryKey: projectKeys.list(wsId),
-    queryFn: () => api.listProjects(),
+    queryKey: teamId ? [...projectKeys.list(wsId), "team", teamId] : projectKeys.list(wsId),
+    queryFn: () => api.listProjects(teamId ? { team_id: teamId } : undefined),
     select: (data) => data.projects,
   });
 }

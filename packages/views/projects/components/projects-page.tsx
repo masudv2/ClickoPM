@@ -4,6 +4,7 @@ import { useState, useCallback } from "react";
 import { Plus, FolderKanban, UserMinus, Check } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { projectListOptions } from "@multica/core/projects/queries";
+import { teamListOptions } from "@multica/core/teams";
 import { useUpdateProject } from "@multica/core/projects/mutations";
 import {
   PROJECT_STATUS_CONFIG,
@@ -227,9 +228,11 @@ function ProjectRow({ project }: { project: Project }) {
 }
 
 
-export function ProjectsPage() {
+export function ProjectsPage({ teamIdentifier }: { teamIdentifier?: string } = {}) {
   const wsId = useWorkspaceId();
-  const { data: projects = [], isLoading } = useQuery(projectListOptions(wsId));
+  const { data: teams = [] } = useQuery({ ...teamListOptions(wsId), enabled: !!teamIdentifier });
+  const teamId = teamIdentifier ? teams.find((t) => t.identifier.toLowerCase() === teamIdentifier.toLowerCase())?.id : undefined;
+  const { data: projects = [], isLoading } = useQuery(projectListOptions(wsId, teamId));
   const openCreateProject = () => useModalStore.getState().open("create-project");
 
   return (

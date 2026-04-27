@@ -286,6 +286,7 @@ vi.mock("react-resizable-panels", () => ({
 const mockIssue: Issue = {
   id: "issue-1",
   workspace_id: "ws-1",
+  team_id: "team-1",
   number: 1,
   identifier: "TES-1",
   title: "Implement authentication",

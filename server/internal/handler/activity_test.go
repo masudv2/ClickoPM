@@ -17,8 +17,9 @@ func TestListTimeline_MergedAndSorted(t *testing.T) {
 	// Create an issue
 	w := httptest.NewRecorder()
 	req := newRequest("POST", "/api/issues?workspace_id="+testWorkspaceID, map[string]any{
-		"title":  "Timeline test issue",
-		"status": "todo",
+		"title":   "Timeline test issue",
+		"status":  "todo",
+		"team_id": testTeamID,
 	})
 	testHandler.CreateIssue(w, req)
 	if w.Code != http.StatusCreated {
@@ -96,8 +97,9 @@ func TestListTimeline_ChronologicalOrder(t *testing.T) {
 	// Create an issue
 	w := httptest.NewRecorder()
 	req := newRequest("POST", "/api/issues?workspace_id="+testWorkspaceID, map[string]any{
-		"title":  "Timeline order test issue",
-		"status": "todo",
+		"title":   "Timeline order test issue",
+		"status":  "todo",
+		"team_id": testTeamID,
 	})
 	testHandler.CreateIssue(w, req)
 	var issue IssueResponse
@@ -155,7 +157,8 @@ func TestCreateComment_WithParentID(t *testing.T) {
 	// Create an issue
 	w := httptest.NewRecorder()
 	req := newRequest("POST", "/api/issues?workspace_id="+testWorkspaceID, map[string]any{
-		"title": "Reply test issue",
+		"title":   "Reply test issue",
+		"team_id": testTeamID,
 	})
 	testHandler.CreateIssue(w, req)
 	var issue IssueResponse
@@ -225,7 +228,7 @@ func TestCreateComment_AgentWithWrongParentRejected(t *testing.T) {
 	// legitimately commenting on another issue must still succeed.)
 	createIssue := func(title string) string {
 		w := httptest.NewRecorder()
-		r := newRequest("POST", "/api/issues?workspace_id="+testWorkspaceID, map[string]any{"title": title})
+		r := newRequest("POST", "/api/issues?workspace_id="+testWorkspaceID, map[string]any{"title": title, "team_id": testTeamID})
 		testHandler.CreateIssue(w, r)
 		if w.Code != http.StatusCreated {
 			t.Fatalf("CreateIssue(%s): %d: %s", title, w.Code, w.Body.String())
@@ -329,7 +332,8 @@ func TestCommentWithParentID_AppearsInTimeline(t *testing.T) {
 	// Create an issue
 	w := httptest.NewRecorder()
 	req := newRequest("POST", "/api/issues?workspace_id="+testWorkspaceID, map[string]any{
-		"title": "Timeline reply test",
+		"title":   "Timeline reply test",
+		"team_id": testTeamID,
 	})
 	testHandler.CreateIssue(w, req)
 	var issue IssueResponse

@@ -24,6 +24,7 @@ var testHandler *Handler
 var testPool *pgxpool.Pool
 var testUserID string
 var testWorkspaceID string
+var testTeamID string
 var testRuntimeID string
 
 const (
@@ -103,6 +104,23 @@ func setupHandlerTestFixture(ctx context.Context, pool *pgxpool.Pool) (string, s
 		INSERT INTO member (workspace_id, user_id, role)
 		VALUES ($1, $2, 'owner')
 	`, workspaceID, userID); err != nil {
+		return "", "", err
+	}
+
+	var teamID string
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO team (workspace_id, name, identifier, color, timezone, settings, issue_counter, position)
+		VALUES ($1, 'Default', 'HAN', 'blue', 'UTC', '{}'::jsonb, 0, 0)
+		RETURNING id
+	`, workspaceID).Scan(&teamID); err != nil {
+		return "", "", err
+	}
+	testTeamID = teamID
+
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO team_member (team_id, member_id)
+		SELECT $1, id FROM member WHERE workspace_id = $2 AND user_id = $3
+	`, teamID, workspaceID, userID); err != nil {
 		return "", "", err
 	}
 
@@ -241,6 +259,7 @@ func TestIssueCRUD(t *testing.T) {
 		"title":    "Test issue from Go test",
 		"status":   "todo",
 		"priority": "medium",
+		"team_id":  testTeamID,
 	})
 	testHandler.CreateIssue(w, req)
 	if w.Code != http.StatusCreated {
@@ -336,7 +355,8 @@ func TestIssueCRUD(t *testing.T) {
 func TestCreateIssueDefaultStatusIsTodo(t *testing.T) {
 	w := httptest.NewRecorder()
 	req := newRequest("POST", "/api/issues?workspace_id="+testWorkspaceID, map[string]any{
-		"title": "Issue with no explicit status",
+		"title":   "Issue with no explicit status",
+		"team_id": testTeamID,
 	})
 	testHandler.CreateIssue(w, req)
 	if w.Code != http.StatusCreated {
@@ -360,8 +380,9 @@ func TestCreateIssueDefaultStatusIsTodo(t *testing.T) {
 func TestCreateIssueExplicitBacklogPreserved(t *testing.T) {
 	w := httptest.NewRecorder()
 	req := newRequest("POST", "/api/issues?workspace_id="+testWorkspaceID, map[string]any{
-		"title":  "Explicit backlog issue",
-		"status": "backlog",
+		"title":   "Explicit backlog issue",
+		"status":  "backlog",
+		"team_id": testTeamID,
 	})
 	testHandler.CreateIssue(w, req)
 	if w.Code != http.StatusCreated {
@@ -414,6 +435,7 @@ func TestCreateSubIssueInheritsParentProject(t *testing.T) {
 	req = newRequest("POST", "/api/issues?workspace_id="+testWorkspaceID, map[string]any{
 		"title":      "Parent with project",
 		"project_id": projectID,
+		"team_id":    testTeamID,
 	})
 	testHandler.CreateIssue(w, req)
 	if w.Code != http.StatusCreated {
@@ -430,6 +452,7 @@ func TestCreateSubIssueInheritsParentProject(t *testing.T) {
 	req = newRequest("POST", "/api/issues?workspace_id="+testWorkspaceID, map[string]any{
 		"title":           "Child without explicit project",
 		"parent_issue_id": parentID,
+		"team_id":         testTeamID,
 	})
 	testHandler.CreateIssue(w, req)
 	if w.Code != http.StatusCreated {
@@ -496,6 +519,7 @@ func TestCreateSubIssueUsesExplicitProjectOverParentProject(t *testing.T) {
 	req = newRequest("POST", "/api/issues?workspace_id="+testWorkspaceID, map[string]any{
 		"title":      "Parent with project",
 		"project_id": parentProjectID,
+		"team_id":    testTeamID,
 	})
 	testHandler.CreateIssue(w, req)
 	if w.Code != http.StatusCreated {
@@ -513,6 +537,7 @@ func TestCreateSubIssueUsesExplicitProjectOverParentProject(t *testing.T) {
 		"title":           "Child with explicit project",
 		"parent_issue_id": parentID,
 		"project_id":      childProjectID,
+		"team_id":         testTeamID,
 	})
 	testHandler.CreateIssue(w, req)
 	if w.Code != http.StatusCreated {
@@ -539,6 +564,7 @@ func TestCreateIssueRejectsNonexistentMemberAssignee(t *testing.T) {
 		"title":         "Ghost member assignee",
 		"assignee_type": "member",
 		"assignee_id":   "00000000-0000-0000-0000-000000000000",
+		"team_id":       testTeamID,
 	})
 	testHandler.CreateIssue(w, req)
 	if w.Code != http.StatusBadRequest {
@@ -555,6 +581,7 @@ func TestCreateIssueRejectsNonexistentAgentAssignee(t *testing.T) {
 		"title":         "Ghost agent assignee",
 		"assignee_type": "agent",
 		"assignee_id":   "00000000-0000-0000-0000-000000000000",
+		"team_id":       testTeamID,
 	})
 	testHandler.CreateIssue(w, req)
 	if w.Code != http.StatusBadRequest {
@@ -570,6 +597,7 @@ func TestCreateIssueRejectsAssigneeTypeWithoutID(t *testing.T) {
 	req := newRequest("POST", "/api/issues?workspace_id="+testWorkspaceID, map[string]any{
 		"title":         "Lone assignee_type",
 		"assignee_type": "member",
+		"team_id":       testTeamID,
 	})
 	testHandler.CreateIssue(w, req)
 	if w.Code != http.StatusBadRequest {
@@ -583,6 +611,7 @@ func TestCreateIssueRejectsAssigneeIDWithoutType(t *testing.T) {
 	req := newRequest("POST", "/api/issues?workspace_id="+testWorkspaceID, map[string]any{
 		"title":       "Lone assignee_id",
 		"assignee_id": testUserID,
+		"team_id":     testTeamID,
 	})
 	testHandler.CreateIssue(w, req)
 	if w.Code != http.StatusBadRequest {
@@ -598,6 +627,7 @@ func TestCreateIssueRejectsUnknownAssigneeType(t *testing.T) {
 		"title":         "Bogus assignee_type",
 		"assignee_type": "user",
 		"assignee_id":   testUserID,
+		"team_id":       testTeamID,
 	})
 	testHandler.CreateIssue(w, req)
 	if w.Code != http.StatusBadRequest {
@@ -613,6 +643,7 @@ func TestCreateIssueAcceptsValidMemberAssignee(t *testing.T) {
 		"title":         "Valid member assignee",
 		"assignee_type": "member",
 		"assignee_id":   testUserID,
+		"team_id":       testTeamID,
 	})
 	testHandler.CreateIssue(w, req)
 	if w.Code != http.StatusCreated {
@@ -634,6 +665,7 @@ func TestCreateIssueRejectsMalformedAssigneeID(t *testing.T) {
 	req := newRequest("POST", "/api/issues?workspace_id="+testWorkspaceID, map[string]any{
 		"title":       "Malformed assignee_id only",
 		"assignee_id": "not-a-uuid",
+		"team_id":     testTeamID,
 	})
 	testHandler.CreateIssue(w, req)
 	if w.Code != http.StatusBadRequest {
@@ -647,7 +679,8 @@ func TestCreateIssueRejectsMalformedAssigneeID(t *testing.T) {
 func TestUpdateIssueRejectsMalformedAssigneeID(t *testing.T) {
 	w := httptest.NewRecorder()
 	req := newRequest("POST", "/api/issues?workspace_id="+testWorkspaceID, map[string]any{
-		"title": "Update malformed assignee target",
+		"title":   "Update malformed assignee target",
+		"team_id": testTeamID,
 	})
 	testHandler.CreateIssue(w, req)
 	if w.Code != http.StatusCreated {
@@ -677,7 +710,8 @@ func TestUpdateIssueRejectsMalformedAssigneeID(t *testing.T) {
 func TestUpdateIssueRejectsNonexistentMemberAssignee(t *testing.T) {
 	w := httptest.NewRecorder()
 	req := newRequest("POST", "/api/issues?workspace_id="+testWorkspaceID, map[string]any{
-		"title": "Update assignee target",
+		"title":   "Update assignee target",
+		"team_id": testTeamID,
 	})
 	testHandler.CreateIssue(w, req)
 	if w.Code != http.StatusCreated {
@@ -712,6 +746,7 @@ func TestUpdateIssueAllowsExplicitUnassign(t *testing.T) {
 		"title":         "Issue to unassign",
 		"assignee_type": "member",
 		"assignee_id":   testUserID,
+		"team_id":       testTeamID,
 	})
 	testHandler.CreateIssue(w, req)
 	if w.Code != http.StatusCreated {
@@ -746,7 +781,8 @@ func TestCommentCRUD(t *testing.T) {
 	// Create an issue first
 	w := httptest.NewRecorder()
 	req := newRequest("POST", "/api/issues?workspace_id="+testWorkspaceID, map[string]any{
-		"title": "Comment test issue",
+		"title":   "Comment test issue",
+		"team_id": testTeamID,
 	})
 	testHandler.CreateIssue(w, req)
 	var issue IssueResponse
@@ -1296,9 +1332,9 @@ func TestResolveActor(t *testing.T) {
 	// Create a task for the agent so we can test X-Task-ID validation.
 	var issueID string
 	err = testPool.QueryRow(ctx,
-		`INSERT INTO issue (workspace_id, title, status, priority, creator_type, creator_id, number, position)
-		 VALUES ($1, 'resolveActor test', 'todo', 'none', 'member', $2, 9999, 0)
-		 RETURNING id`, testWorkspaceID, testUserID,
+		`INSERT INTO issue (workspace_id, team_id, title, status, priority, creator_type, creator_id, number, position)
+		 VALUES ($1, $3, 'resolveActor test', 'todo', 'none', 'member', $2, 9999, 0)
+		 RETURNING id`, testWorkspaceID, testUserID, testTeamID,
 	).Scan(&issueID)
 	if err != nil {
 		t.Fatalf("failed to create test issue: %v", err)
@@ -1411,6 +1447,7 @@ func TestBacklogNoTriggerOnCreate(t *testing.T) {
 		"status":        "backlog",
 		"assignee_type": "agent",
 		"assignee_id":   agentID,
+		"team_id":       testTeamID,
 	})
 	testHandler.CreateIssue(w, req)
 	if w.Code != http.StatusCreated {
@@ -1460,6 +1497,7 @@ func TestBacklogToTodoTriggersAgent(t *testing.T) {
 		"status":        "backlog",
 		"assignee_type": "agent",
 		"assignee_id":   agentID,
+		"team_id":       testTeamID,
 	})
 	testHandler.CreateIssue(w, req)
 	if w.Code != http.StatusCreated {

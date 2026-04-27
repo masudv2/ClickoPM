@@ -268,10 +268,10 @@ func TestGetTaskStatus_WithDaemonToken_CrossWorkspace(t *testing.T) {
 	// Create a task in the test workspace.
 	var issueID, taskID string
 	err := testPool.QueryRow(context.Background(), `
-		INSERT INTO issue (workspace_id, title, status, priority, creator_id, creator_type)
-		VALUES ($1, 'daemon-auth-test-issue', 'todo', 'medium', $2, 'member')
+		INSERT INTO issue (workspace_id, team_id, title, status, priority, creator_id, creator_type)
+		VALUES ($1, $3, 'daemon-auth-test-issue', 'todo', 'medium', $2, 'member')
 		RETURNING id
-	`, testWorkspaceID, testUserID).Scan(&issueID)
+	`, testWorkspaceID, testUserID, testTeamID).Scan(&issueID)
 	if err != nil {
 		t.Fatalf("setup: create issue: %v", err)
 	}
@@ -332,10 +332,10 @@ func TestGetIssueGCCheck_WithDaemonToken_CrossWorkspace(t *testing.T) {
 	// only status + updated_at, so a "done" issue exercises the typical path.
 	var issueID string
 	err := testPool.QueryRow(context.Background(), `
-		INSERT INTO issue (workspace_id, title, status, priority, creator_id, creator_type)
-		VALUES ($1, 'gc-check-auth-test-issue', 'done', 'medium', $2, 'member')
+		INSERT INTO issue (workspace_id, team_id, title, status, priority, creator_id, creator_type)
+		VALUES ($1, $3, 'gc-check-auth-test-issue', 'done', 'medium', $2, 'member')
 		RETURNING id
-	`, testWorkspaceID, testUserID).Scan(&issueID)
+	`, testWorkspaceID, testUserID, testTeamID).Scan(&issueID)
 	if err != nil {
 		t.Fatalf("setup: create issue: %v", err)
 	}
@@ -437,12 +437,21 @@ func setupForeignWorkspaceFixture(t *testing.T) (string, string) {
 		t.Fatalf("setup: create foreign agent: %v", err)
 	}
 
+	var foreignTeamID string
+	if err := testPool.QueryRow(ctx, `
+		INSERT INTO team (workspace_id, name, identifier)
+		VALUES ($1, 'Default', 'FOR')
+		RETURNING id
+	`, foreignWorkspaceID).Scan(&foreignTeamID); err != nil {
+		t.Fatalf("setup: create foreign team: %v", err)
+	}
+
 	var issueID string
 	if err := testPool.QueryRow(ctx, `
-		INSERT INTO issue (workspace_id, title, status, priority, creator_id, creator_type)
-		VALUES ($1, 'foreign-workspace-issue', 'todo', 'medium', $2, 'agent')
+		INSERT INTO issue (workspace_id, team_id, title, status, priority, creator_id, creator_type)
+		VALUES ($1, $3, 'foreign-workspace-issue', 'todo', 'medium', $2, 'agent')
 		RETURNING id
-	`, foreignWorkspaceID, agentID).Scan(&issueID); err != nil {
+	`, foreignWorkspaceID, agentID, foreignTeamID).Scan(&issueID); err != nil {
 		t.Fatalf("setup: create foreign issue: %v", err)
 	}
 
@@ -531,10 +540,10 @@ func TestCancelTask_TaskBelongsToDifferentIssue_Returns404(t *testing.T) {
 	// Issue X — the task's real parent.
 	var issueXID, taskID string
 	if err := testPool.QueryRow(ctx, `
-		INSERT INTO issue (workspace_id, title, status, priority, creator_id, creator_type, number, position)
-		VALUES ($1, 'cancel-crossissue-x', 'todo', 'medium', $2, 'member', 91001, 0)
+		INSERT INTO issue (workspace_id, team_id, title, status, priority, creator_id, creator_type, number, position)
+		VALUES ($1, $3, 'cancel-crossissue-x', 'todo', 'medium', $2, 'member', 91001, 0)
 		RETURNING id
-	`, testWorkspaceID, testUserID).Scan(&issueXID); err != nil {
+	`, testWorkspaceID, testUserID, testTeamID).Scan(&issueXID); err != nil {
 		t.Fatalf("setup: create issue X: %v", err)
 	}
 	t.Cleanup(func() { testPool.Exec(context.Background(), `DELETE FROM issue WHERE id = $1`, issueXID) })
@@ -551,10 +560,10 @@ func TestCancelTask_TaskBelongsToDifferentIssue_Returns404(t *testing.T) {
 	// Issue Y — a sibling in the same workspace, used only as the URL cover.
 	var issueYID string
 	if err := testPool.QueryRow(ctx, `
-		INSERT INTO issue (workspace_id, title, status, priority, creator_id, creator_type, number, position)
-		VALUES ($1, 'cancel-crossissue-y', 'todo', 'medium', $2, 'member', 91002, 0)
+		INSERT INTO issue (workspace_id, team_id, title, status, priority, creator_id, creator_type, number, position)
+		VALUES ($1, $3, 'cancel-crossissue-y', 'todo', 'medium', $2, 'member', 91002, 0)
 		RETURNING id
-	`, testWorkspaceID, testUserID).Scan(&issueYID); err != nil {
+	`, testWorkspaceID, testUserID, testTeamID).Scan(&issueYID); err != nil {
 		t.Fatalf("setup: create issue Y: %v", err)
 	}
 	t.Cleanup(func() { testPool.Exec(context.Background(), `DELETE FROM issue WHERE id = $1`, issueYID) })
@@ -598,10 +607,10 @@ func TestCancelTask_SameIssue_Succeeds(t *testing.T) {
 
 	var issueID, taskID string
 	if err := testPool.QueryRow(ctx, `
-		INSERT INTO issue (workspace_id, title, status, priority, creator_id, creator_type, number, position)
-		VALUES ($1, 'cancel-happy-path', 'todo', 'medium', $2, 'member', 91003, 0)
+		INSERT INTO issue (workspace_id, team_id, title, status, priority, creator_id, creator_type, number, position)
+		VALUES ($1, $3, 'cancel-happy-path', 'todo', 'medium', $2, 'member', 91003, 0)
 		RETURNING id
-	`, testWorkspaceID, testUserID).Scan(&issueID); err != nil {
+	`, testWorkspaceID, testUserID, testTeamID).Scan(&issueID); err != nil {
 		t.Fatalf("setup: create issue: %v", err)
 	}
 	t.Cleanup(func() { testPool.Exec(context.Background(), `DELETE FROM issue WHERE id = $1`, issueID) })
@@ -820,10 +829,10 @@ func TestDaemonRegister_MergesLegacyDaemonIDRuntime(t *testing.T) {
 	// drop historical tasks).
 	var legacyIssueID, legacyTaskID string
 	if err := testPool.QueryRow(ctx, `
-		INSERT INTO issue (workspace_id, title, status, priority, creator_id, creator_type, number, position)
-		VALUES ($1, 'legacy-task-owner', 'todo', 'medium', $2, 'member', 97501, 0)
+		INSERT INTO issue (workspace_id, team_id, title, status, priority, creator_id, creator_type, number, position)
+		VALUES ($1, $3, 'legacy-task-owner', 'todo', 'medium', $2, 'member', 97501, 0)
 		RETURNING id
-	`, testWorkspaceID, testUserID).Scan(&legacyIssueID); err != nil {
+	`, testWorkspaceID, testUserID, testTeamID).Scan(&legacyIssueID); err != nil {
 		t.Fatalf("seed legacy issue: %v", err)
 	}
 	t.Cleanup(func() { testPool.Exec(context.Background(), `DELETE FROM issue WHERE id = $1`, legacyIssueID) })
@@ -1382,12 +1391,21 @@ func TestClaimTaskByRuntime_TaskWorkspaceMismatch_CancelsAndRejects(t *testing.T
 	}
 	t.Cleanup(func() { testPool.Exec(context.Background(), `DELETE FROM workspace WHERE id = $1`, foreignWorkspaceID) })
 
+	var mismatchTeamID string
+	if err := testPool.QueryRow(ctx, `
+		INSERT INTO team (workspace_id, name, identifier)
+		VALUES ($1, 'Default', 'MFC')
+		RETURNING id
+	`, foreignWorkspaceID).Scan(&mismatchTeamID); err != nil {
+		t.Fatalf("setup: create foreign team: %v", err)
+	}
+
 	var foreignIssueID string
 	if err := testPool.QueryRow(ctx, `
-		INSERT INTO issue (workspace_id, title, status, priority, creator_id, creator_type, number, position)
-		VALUES ($1, 'mismatch-foreign-issue', 'todo', 'medium', $2, 'member', 77001, 0)
+		INSERT INTO issue (workspace_id, team_id, title, status, priority, creator_id, creator_type, number, position)
+		VALUES ($1, $3, 'mismatch-foreign-issue', 'todo', 'medium', $2, 'member', 77001, 0)
 		RETURNING id
-	`, foreignWorkspaceID, testUserID).Scan(&foreignIssueID); err != nil {
+	`, foreignWorkspaceID, testUserID, mismatchTeamID).Scan(&foreignIssueID); err != nil {
 		t.Fatalf("setup: create foreign issue: %v", err)
 	}
 
@@ -1452,10 +1470,10 @@ func TestCompleteTask_CommentTriggered_SynthesizesCommentWhenAgentSilent(t *test
 
 	var issueID string
 	if err := testPool.QueryRow(ctx, `
-		INSERT INTO issue (workspace_id, title, status, priority, creator_id, creator_type, number, position)
-		VALUES ($1, 'mul-1198 fixture', 'in_progress', 'none', $2, 'member', 81198, 0)
+		INSERT INTO issue (workspace_id, team_id, title, status, priority, creator_id, creator_type, number, position)
+		VALUES ($1, $3, 'mul-1198 fixture', 'in_progress', 'none', $2, 'member', 81198, 0)
 		RETURNING id
-	`, testWorkspaceID, testUserID).Scan(&issueID); err != nil {
+	`, testWorkspaceID, testUserID, testTeamID).Scan(&issueID); err != nil {
 		t.Fatalf("setup: create issue: %v", err)
 	}
 	t.Cleanup(func() { testPool.Exec(ctx, `DELETE FROM issue WHERE id = $1`, issueID) })
@@ -1555,10 +1573,10 @@ func TestCompleteTask_CommentTriggered_SkipsSynthesisWhenAgentAlreadyCommented(t
 
 	var issueID string
 	if err := testPool.QueryRow(ctx, `
-		INSERT INTO issue (workspace_id, title, status, priority, creator_id, creator_type, number, position)
-		VALUES ($1, 'mul-1198 dedup fixture', 'in_progress', 'none', $2, 'member', 81199, 0)
+		INSERT INTO issue (workspace_id, team_id, title, status, priority, creator_id, creator_type, number, position)
+		VALUES ($1, $3, 'mul-1198 dedup fixture', 'in_progress', 'none', $2, 'member', 81199, 0)
 		RETURNING id
-	`, testWorkspaceID, testUserID).Scan(&issueID); err != nil {
+	`, testWorkspaceID, testUserID, testTeamID).Scan(&issueID); err != nil {
 		t.Fatalf("setup: create issue: %v", err)
 	}
 	t.Cleanup(func() { testPool.Exec(ctx, `DELETE FROM issue WHERE id = $1`, issueID) })

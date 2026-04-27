@@ -411,6 +411,28 @@ func (h *Handler) getIssuePrefix(ctx context.Context, workspaceID pgtype.UUID) s
 	return generateIssuePrefix(ws.Name)
 }
 
+// getTeamIssuePrefix returns the team identifier used as the issue prefix.
+func (h *Handler) getTeamIssuePrefix(ctx context.Context, teamID pgtype.UUID) string {
+	team, err := h.Queries.GetTeam(ctx, teamID)
+	if err != nil {
+		return ""
+	}
+	return team.Identifier
+}
+
+// teamPrefixMap builds a map of team UUID string -> identifier for all teams in a workspace.
+func (h *Handler) teamPrefixMap(ctx context.Context, workspaceID pgtype.UUID) map[string]string {
+	teams, err := h.Queries.ListTeams(ctx, workspaceID)
+	if err != nil {
+		return nil
+	}
+	m := make(map[string]string, len(teams))
+	for _, t := range teams {
+		m[uuidToString(t.ID)] = t.Identifier
+	}
+	return m
+}
+
 func (h *Handler) loadAgentForUser(w http.ResponseWriter, r *http.Request, agentID string) (db.Agent, bool) {
 	if _, ok := requireUserID(w, r); !ok {
 		return db.Agent{}, false

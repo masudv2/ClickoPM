@@ -103,10 +103,17 @@ func (s *AutopilotService) dispatchCreateIssue(ctx context.Context, ap db.Autopi
 
 	qtx := s.Queries.WithTx(tx)
 
-	// Get next issue number.
-	issueNumber, err := qtx.IncrementIssueCounter(ctx, ap.WorkspaceID)
+	// Get default team for workspace.
+	teams, err := s.Queries.ListTeams(ctx, ap.WorkspaceID)
+	if err != nil || len(teams) == 0 {
+		return fmt.Errorf("no team found for workspace")
+	}
+	team := teams[0]
+
+	// Get next issue number from team counter.
+	issueNumber, err := qtx.IncrementTeamIssueCounter(ctx, team.ID)
 	if err != nil {
-		return fmt.Errorf("increment issue counter: %w", err)
+		return fmt.Errorf("increment team issue counter: %w", err)
 	}
 
 	title := s.interpolateTemplate(ap)
@@ -127,6 +134,7 @@ func (s *AutopilotService) dispatchCreateIssue(ctx context.Context, ap db.Autopi
 		DueDate:       pgtype.Timestamptz{},
 		Number:        issueNumber,
 		ProjectID:     pgtype.UUID{},
+		TeamID:        team.ID,
 		OriginType:    pgtype.Text{String: "autopilot", Valid: true},
 		OriginID:      ap.ID,
 	})
@@ -150,7 +158,7 @@ func (s *AutopilotService) dispatchCreateIssue(ctx context.Context, ap db.Autopi
 
 	// Publish issue:created so the existing event chain fires
 	// (subscriber listeners, activity listeners, notification listeners).
-	prefix := s.getIssuePrefix(ap.WorkspaceID)
+	prefix := team.Identifier
 	s.Bus.Publish(events.Event{
 		Type:        protocol.EventIssueCreated,
 		WorkspaceID: util.UUIDToString(ap.WorkspaceID),

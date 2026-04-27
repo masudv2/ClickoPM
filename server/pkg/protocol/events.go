@@ -68,6 +68,18 @@ const (
 	EventProjectUpdated = "project:updated"
 	EventProjectDeleted = "project:deleted"
 
+	// Label events
+	EventLabelCreated = "label:created"
+	EventLabelUpdated = "label:updated"
+	EventLabelDeleted = "label:deleted"
+
+	// Team events
+	EventTeamCreated       = "team:created"
+	EventTeamUpdated       = "team:updated"
+	EventTeamDeleted       = "team:deleted"
+	EventTeamMemberAdded   = "team_member:added"
+	EventTeamMemberRemoved = "team_member:removed"
+
 	// Pin events
 	EventPinCreated   = "pin:created"
 	EventPinDeleted   = "pin:deleted"

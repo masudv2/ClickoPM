@@ -11,6 +11,8 @@ import { defaultStorage } from "../platform/storage";
 import { getCurrentWsId, getCurrentSlug } from "../platform/workspace-storage";
 import { issueKeys } from "../issues/queries";
 import { projectKeys } from "../projects/queries";
+import { labelKeys } from "../labels/queries";
+import { teamKeys } from "../teams/queries";
 import { pinKeys } from "../pins/queries";
 import { autopilotKeys } from "../autopilots/queries";
 import { runtimeKeys } from "../runtimes/queries";
@@ -116,6 +118,21 @@ export function useRealtimeSync(
       project: () => {
         const wsId = getCurrentWsId();
         if (wsId) qc.invalidateQueries({ queryKey: projectKeys.all(wsId) });
+      },
+      label: () => {
+        const wsId = getCurrentWsId();
+        if (wsId) {
+          qc.invalidateQueries({ queryKey: labelKeys.all(wsId) });
+          qc.invalidateQueries({ queryKey: issueKeys.all(wsId) });
+        }
+      },
+      team: () => {
+        const wsId = getCurrentWsId();
+        if (wsId) qc.invalidateQueries({ queryKey: teamKeys.all(wsId) });
+      },
+      team_member: () => {
+        const wsId = getCurrentWsId();
+        if (wsId) qc.invalidateQueries({ queryKey: teamKeys.all(wsId) });
       },
       pin: () => {
         const wsId = getCurrentWsId();

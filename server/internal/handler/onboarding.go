@@ -433,6 +433,14 @@ func (h *Handler) ImportStarterContent(w http.ResponseWriter, r *http.Request) {
 		subSpecs = req.AgentGuidedSubIssues
 	}
 
+	// Get default team for workspace.
+	teams, err := h.Queries.ListTeams(r.Context(), parseUUID(req.WorkspaceID))
+	if err != nil || len(teams) == 0 {
+		writeError(w, http.StatusInternalServerError, "no team found for workspace")
+		return
+	}
+	defaultTeam := teams[0]
+
 	// --- Create project ---
 	project, err := qtx.CreateProject(r.Context(), db.CreateProjectParams{
 		WorkspaceID: parseUUID(req.WorkspaceID),
@@ -441,6 +449,7 @@ func (h *Handler) ImportStarterContent(w http.ResponseWriter, r *http.Request) {
 		Icon:        strOrNullText(req.Project.Icon),
 		Status:      "planned",
 		Priority:    "none",
+		TeamID:      defaultTeam.ID,
 	})
 	if err != nil {
 		slog.Warn("import starter content: create project failed", append(logger.RequestAttrs(r), "error", err)...)
@@ -452,7 +461,7 @@ func (h *Handler) ImportStarterContent(w http.ResponseWriter, r *http.Request) {
 	var welcomeIssueID *string
 	var welcomeIssueForEvent *db.Issue
 	if hasAgent && req.WelcomeIssueTemplate.Title != "" {
-		welcomeNumber, err := qtx.IncrementIssueCounter(r.Context(), parseUUID(req.WorkspaceID))
+		welcomeNumber, err := qtx.IncrementTeamIssueCounter(r.Context(), defaultTeam.ID)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to allocate issue number")
 			return
@@ -472,6 +481,7 @@ func (h *Handler) ImportStarterContent(w http.ResponseWriter, r *http.Request) {
 			CreatorType:  "member",
 			CreatorID:    actorID,
 			Number:       welcomeNumber,
+			TeamID:       defaultTeam.ID,
 		})
 		if err != nil {
 			slog.Warn("import starter content: create welcome issue failed", append(logger.RequestAttrs(r), "error", err)...)
@@ -490,7 +500,7 @@ func (h *Handler) ImportStarterContent(w http.ResponseWriter, r *http.Request) {
 		if sub.Title == "" {
 			continue
 		}
-		number, err := qtx.IncrementIssueCounter(r.Context(), parseUUID(req.WorkspaceID))
+		number, err := qtx.IncrementTeamIssueCounter(r.Context(), defaultTeam.ID)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to allocate issue number")
 			return
@@ -521,6 +531,7 @@ func (h *Handler) ImportStarterContent(w http.ResponseWriter, r *http.Request) {
 			CreatorID:    actorID,
 			Number:       number,
 			ProjectID:    project.ID,
+			TeamID:       defaultTeam.ID,
 		})
 		if err != nil {
 			slog.Warn("import starter content: create sub-issue failed", append(logger.RequestAttrs(r), "error", err, "title", sub.Title)...)
@@ -587,7 +598,7 @@ func (h *Handler) ImportStarterContent(w http.ResponseWriter, r *http.Request) {
 	projectResp := projectToResponse(project)
 	h.publish(protocol.EventProjectCreated, req.WorkspaceID, "member", userID, map[string]any{"project": projectResp})
 
-	workspacePrefix := h.getIssuePrefix(r.Context(), parseUUID(req.WorkspaceID))
+	workspacePrefix := defaultTeam.Identifier
 	if welcomeIssueForEvent != nil {
 		welcomeResp := issueToResponse(*welcomeIssueForEvent, workspacePrefix)
 		h.publish(protocol.EventIssueCreated, req.WorkspaceID, "member", userID, map[string]any{"issue": welcomeResp})

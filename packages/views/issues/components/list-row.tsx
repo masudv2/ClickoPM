@@ -13,6 +13,7 @@ import { projectListOptions } from "@multica/core/projects/queries";
 import { PriorityIcon } from "./priority-icon";
 import { ProgressRing } from "./progress-ring";
 import { IssueActionsContextMenu } from "../actions";
+import { LabelPill } from "../../labels/components/label-pill";
 
 export interface ChildProgress {
   done: number;
@@ -88,6 +89,16 @@ export const ListRow = memo(function ListRow({
               </span>
             )}
           </span>
+          {issue.labels && issue.labels.length > 0 && (
+            <span className="inline-flex shrink-0 items-center gap-1">
+              {issue.labels.slice(0, 3).map((l) => (
+                <LabelPill key={l.id} label={l} />
+              ))}
+              {issue.labels.length > 3 && (
+                <span className="text-[11px] text-muted-foreground">+{issue.labels.length - 3}</span>
+              )}
+            </span>
+          )}
           {showProject && (
             <span className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground max-w-[140px]">
               <span aria-hidden="true" className="shrink-0">{project!.icon || "📁"}</span>
