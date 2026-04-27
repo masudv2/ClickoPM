@@ -326,6 +326,20 @@ func NewRouter(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus, analytics
 				})
 			})
 
+			// Cycles
+			r.Route("/api/teams/{teamId}/cycles", func(r chi.Router) {
+				r.Get("/", h.ListCycles)
+				r.Post("/", h.CreateCycle)
+				r.Get("/active", h.GetActiveCycle)
+			})
+			r.Route("/api/cycles/{id}", func(r chi.Router) {
+				r.Get("/", h.GetCycle)
+				r.Put("/", h.UpdateCycle)
+				r.Delete("/", h.DeleteCycle)
+				r.Post("/start", h.StartCycle)
+				r.Post("/complete", h.CompleteCycle)
+			})
+
 			// Autopilots
 			r.Route("/api/autopilots", func(r chi.Router) {
 				r.Get("/", h.ListAutopilots)
