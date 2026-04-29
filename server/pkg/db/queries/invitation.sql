@@ -48,3 +48,9 @@ WHERE id = $1 AND status = 'pending';
 -- name: GetPendingInvitationByEmail :one
 SELECT * FROM workspace_invitation
 WHERE workspace_id = $1 AND invitee_email = $2 AND status = 'pending';
+
+-- name: HasPendingInvitationForEmail :one
+SELECT EXISTS(
+  SELECT 1 FROM workspace_invitation
+  WHERE invitee_email = $1 AND status = 'pending' AND expires_at > now()
+) AS has_invitation;

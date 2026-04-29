@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, Plus, MoreHorizontal, Settings, Link2, LogOut, ListTodo, Timer, FolderKanban, FolderPlus } from "lucide-react";
+import { ChevronRight, Plus, MoreHorizontal, Settings, Link2, LogOut, ListTodo, Timer, FolderKanban, FolderPlus, Briefcase } from "lucide-react";
 import { AppLink } from "../../navigation";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { useWorkspacePaths } from "@multica/core/paths";
@@ -45,7 +45,7 @@ function TeamProjectsList({ teamId, teamIdentifier }: { teamId: string; teamIden
             href={p.teamProjectDetail(teamIdentifier, proj.id)}
             className="flex items-center gap-2 rounded-md px-2 py-1 pl-10 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
           >
-            <span className="size-2 rounded-full bg-primary shrink-0" />
+            <Briefcase className="size-3.5 shrink-0 text-muted-foreground" />
             <span className="flex-1 truncate">{proj.title}</span>
             <span className="text-xs tabular-nums">{pct}%</span>
           </AppLink>
@@ -105,7 +105,7 @@ function TeamContextMenu({ team }: { team: Team }) {
 
 function TeamNavItem({ team }: { team: Team }) {
   const [expanded, setExpanded] = useState(true);
-  const [projectsExpanded, setProjectsExpanded] = useState(false);
+  const [projectsExpanded, setProjectsExpanded] = useState(true);
   const p = useWorkspacePaths();
 
   return (

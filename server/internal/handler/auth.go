@@ -114,7 +114,7 @@ func (h *Handler) findOrCreateUser(ctx context.Context, email string) (user db.U
 		return db.User{}, false, err
 	}
 
-	if err := h.checkSignupAllowed(email, isNew); err != nil {
+	if err := h.checkSignupAllowed(ctx, email, isNew); err != nil {
 		return db.User{}, false, err
 	}
 
@@ -165,7 +165,7 @@ func signupSourceFromRequest(r *http.Request) string {
 	return decoded
 }
 
-func (h *Handler) checkSignupAllowed(email string, isNewUser bool) error {
+func (h *Handler) checkSignupAllowed(ctx context.Context, email string, isNewUser bool) error {
 	if !isNewUser {
 		return nil // existing users always allowed to log in
 	}
@@ -186,12 +186,19 @@ func (h *Handler) checkSignupAllowed(email string, isNewUser bool) error {
 		return nil
 	}
 
-	// 3. general signup flag
+	// 3. users with pending invitations are always allowed to sign up
+	if h.Queries != nil {
+		if hasInvite, err := h.Queries.HasPendingInvitationForEmail(ctx, email); err == nil && hasInvite {
+			return nil
+		}
+	}
+
+	// 4. general signup flag
 	if !h.cfg.AllowSignup {
 		return ErrSignupProhibited
 	}
 
-	// 4. if allowlists are set but didn't match, block
+	// 5. if allowlists are set but didn't match, block
 	if len(h.cfg.AllowedEmailDomains) > 0 || len(h.cfg.AllowedEmails) > 0 {
 		return ErrSignupProhibited
 	}
@@ -231,7 +238,7 @@ func (h *Handler) SendCode(w http.ResponseWriter, r *http.Request) {
 		}
 		// User does not exist → treat as new user
 		isNewUser := true
-		if err := h.checkSignupAllowed(email, isNewUser); err != nil {
+		if err := h.checkSignupAllowed(r.Context(), email, isNewUser); err != nil {
 			var signupErr SignupError
 			if errors.As(err, &signupErr) {
 				writeError(w, http.StatusForbidden, signupErr.Error())
@@ -243,7 +250,7 @@ func (h *Handler) SendCode(w http.ResponseWriter, r *http.Request) {
 	} else {
 		// User already exists → always allowed to login
 		isNewUser := false
-		if err := h.checkSignupAllowed(email, isNewUser); err != nil {
+		if err := h.checkSignupAllowed(r.Context(), email, isNewUser); err != nil {
 			// This should rarely happen, but handle it anyway
 			var signupErr SignupError
 			if errors.As(err, &signupErr) {
