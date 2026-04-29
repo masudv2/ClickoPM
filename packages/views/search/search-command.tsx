@@ -17,7 +17,6 @@ import {
   Bot,
   Monitor,
   Moon,
-  Sun,
   BookOpenText,
   Settings,
   Building2,
@@ -248,35 +247,13 @@ export function SearchCommand() {
 
     items.push(
       {
-        key: "theme-light",
-        label: "Switch to Light Theme",
-        icon: Sun,
-        keywords: ["light", "theme", "appearance", "mode", "bright"],
-        trailing: activeThemeCheck("light"),
-        onSelect: () => {
-          setTheme("light");
-          setOpen(false);
-        },
-      },
-      {
         key: "theme-dark",
-        label: "Switch to Dark Theme",
+        label: "Dark Theme (Active)",
         icon: Moon,
         keywords: ["dark", "theme", "appearance", "mode", "night"],
         trailing: activeThemeCheck("dark"),
         onSelect: () => {
           setTheme("dark");
-          setOpen(false);
-        },
-      },
-      {
-        key: "theme-system",
-        label: "Use System Theme",
-        icon: Monitor,
-        keywords: ["system", "theme", "appearance", "mode", "auto"],
-        trailing: activeThemeCheck("system"),
-        onSelect: () => {
-          setTheme("system");
           setOpen(false);
         },
       },

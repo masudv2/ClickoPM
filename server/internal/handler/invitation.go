@@ -399,9 +399,9 @@ func (h *Handler) AcceptInvitation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Auto-mark client-role users as onboarded so they skip the workspace
-	// creation / runtime setup flow and go straight to the portal.
-	if accepted.Role == "client" && !user.OnboardedAt.Valid {
+	// Auto-mark invited users as onboarded so they skip the workspace
+	// creation / runtime setup flow and go straight to their workspace.
+	if !user.OnboardedAt.Valid {
 		h.Queries.MarkUserOnboarded(r.Context(), user.ID)
 	}
 
