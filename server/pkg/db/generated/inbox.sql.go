@@ -196,6 +196,27 @@ func (q *Queries) CreateInboxItem(ctx context.Context, arg CreateInboxItemParams
 	return i, err
 }
 
+const existsSLABreachInbox = `-- name: ExistsSLABreachInbox :one
+SELECT EXISTS (
+  SELECT 1 FROM inbox_item
+  WHERE workspace_id = $1 AND recipient_id = $2 AND type = 'sla_breach'
+    AND archived = false AND details @> $3::jsonb
+) AS exists
+`
+
+type ExistsSLABreachInboxParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	RecipientID pgtype.UUID `json:"recipient_id"`
+	Column3     []byte      `json:"column_3"`
+}
+
+func (q *Queries) ExistsSLABreachInbox(ctx context.Context, arg ExistsSLABreachInboxParams) (bool, error) {
+	row := q.db.QueryRow(ctx, existsSLABreachInbox, arg.WorkspaceID, arg.RecipientID, arg.Column3)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const getInboxItem = `-- name: GetInboxItem :one
 SELECT id, workspace_id, recipient_type, recipient_id, type, severity, issue_id, title, body, read, archived, created_at, actor_type, actor_id, details FROM inbox_item
 WHERE id = $1

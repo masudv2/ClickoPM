@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useDefaultLayout, usePanelRef } from "react-resizable-panels";
 import { AppLink } from "../../navigation";
 import { useNavigation } from "../../navigation";
@@ -35,13 +35,17 @@ import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, Command
 import { AvatarGroup, AvatarGroupCount } from "@multica/ui/components/ui/avatar";
 import { ActorAvatar } from "../../common/actor-avatar";
 import type { IssueStatus, IssuePriority, TimelineEntry } from "@multica/core/types";
-import { STATUS_CONFIG, PRIORITY_CONFIG } from "@multica/core/issues/config";
+import { STATUS_CONFIG, PRIORITY_CONFIG, getEstimateScale } from "@multica/core/issues/config";
+import { teamListOptions } from "@multica/core/teams";
 import { StatusIcon, PriorityIcon, StatusPicker, PriorityPicker, DueDatePicker, AssigneePicker } from ".";
+import { StartDatePicker } from "./pickers/start-date-picker";
 import { IssueActionsDropdown, useIssueActions } from "../actions";
 import { ProjectPicker } from "../../projects/components/project-picker";
 import { LabelPicker } from "../../labels/components/label-picker";
 import { CyclePicker } from "../../cycles/components/cycle-picker";
 import { EstimatePicker } from "../../cycles/components/estimate-picker";
+import { cycleDetailOptions } from "@multica/core/cycles/queries";
+import type { CycleWithProgress } from "@multica/core/types";
 import { CommentCard } from "./comment-card";
 import { CommentInput } from "./comment-input";
 import { AgentLiveCard, TaskRunHistory } from "./agent-live-card";
@@ -183,6 +187,7 @@ export function IssueDetail({ issueId, onDelete, defaultSidebarOpen = true, layo
   const { data: members = [] } = useQuery(memberListOptions(wsId));
   const { data: agents = [] } = useQuery(agentListOptions(wsId));
   const { data: allIssues = [] } = useQuery(issueListOptions(wsId));
+  const { data: teams = [] } = useQuery(teamListOptions(wsId));
   const { getActorName } = useActorName();
   const { uploadWithToast } = useFileUpload(api);
   const { defaultLayout, onLayoutChanged } = useDefaultLayout({
@@ -216,6 +221,24 @@ export function IssueDetail({ issueId, onDelete, defaultSidebarOpen = true, layo
       return cached?.description != null ? cached : undefined;
     },
   });
+
+  // Capacity map for assignee picker (only when issue is in a cycle)
+  const { data: cycleData } = useQuery({
+    ...cycleDetailOptions(wsId, issue?.cycle_id ?? ""),
+    enabled: !!issue?.cycle_id,
+  });
+  const capacityMap = useMemo(() => {
+    if (!cycleData) return undefined;
+    const c = cycleData as CycleWithProgress;
+    if (!c.assignee_breakdown?.length) return undefined;
+    const map = new Map<string, number>();
+    for (const a of c.assignee_breakdown) {
+      if (a.id && a.actor_type === "member") {
+        map.set(a.id, a.capacity_percent ?? 0);
+      }
+    }
+    return map.size > 0 ? map : undefined;
+  }, [cycleData]);
 
   // Record recent visit
   const recordVisit = useRecentIssuesStore((s) => s.recordVisit);
@@ -403,7 +426,10 @@ export function IssueDetail({ issueId, onDelete, defaultSidebarOpen = true, layo
             <PriorityPicker priority={issue.priority} onUpdate={handleUpdateField} align="start" />
           </PropRow>
           <PropRow label="Assignee">
-            <AssigneePicker assigneeType={issue.assignee_type} assigneeId={issue.assignee_id} onUpdate={handleUpdateField} align="start" />
+            <AssigneePicker assigneeType={issue.assignee_type} assigneeId={issue.assignee_id} onUpdate={handleUpdateField} align="start" capacityMap={capacityMap} />
+          </PropRow>
+          <PropRow label="Start date">
+            <StartDatePicker startDate={issue.start_date} onUpdate={handleUpdateField} />
           </PropRow>
           <PropRow label="Due date">
             <DueDatePicker dueDate={issue.due_date} onUpdate={handleUpdateField} />
@@ -412,13 +438,13 @@ export function IssueDetail({ issueId, onDelete, defaultSidebarOpen = true, layo
             <ProjectPicker projectId={issue.project_id} onUpdate={handleUpdateField} />
           </PropRow>
           <PropRow label="Labels">
-            <LabelPicker issueId={issue.id} labels={issue.labels} />
+            <LabelPicker issueId={issue.id} labels={issue.labels ?? []} />
           </PropRow>
           <PropRow label="Cycle">
             <CyclePicker cycleId={issue.cycle_id} teamId={issue.team_id} onUpdate={handleUpdateField} />
           </PropRow>
           <PropRow label="Estimate">
-            <EstimatePicker estimate={issue.estimate} onUpdate={handleUpdateField} />
+            <EstimatePicker estimate={issue.estimate} onUpdate={handleUpdateField} scale={getEstimateScale(teams.find((t) => t.id === issue.team_id)?.settings)} />
           </PropRow>
         </div>}
       </div>

@@ -6,6 +6,8 @@ import {
   ISSUE_PAGE_SIZE,
   type MyIssuesFilter,
 } from "./queries";
+import { cycleKeys } from "../cycles/queries";
+import { dashboardKeys } from "../dashboard/queries";
 import {
   addIssueToBuckets,
   findIssueLocation,
@@ -52,6 +54,7 @@ export type ToggleIssueReactionVars = {
 export function useLoadMoreByStatus(
   status: IssueStatus,
   myIssues?: { scope: string; filter: MyIssuesFilter },
+  teamId?: string,
 ) {
   const qc = useQueryClient();
   const wsId = useWorkspaceId();
@@ -59,7 +62,9 @@ export function useLoadMoreByStatus(
 
   const queryKey = myIssues
     ? issueKeys.myList(wsId, myIssues.scope, myIssues.filter)
-    : issueKeys.list(wsId);
+    : teamId
+      ? [...issueKeys.list(wsId), "team", teamId]
+      : issueKeys.list(wsId);
   const cache = qc.getQueryData<ListIssuesCache>(queryKey);
   const bucket = cache?.byStatus[status];
   const loaded = bucket?.issues.length ?? 0;
@@ -75,6 +80,7 @@ export function useLoadMoreByStatus(
         limit: ISSUE_PAGE_SIZE,
         offset: loaded,
         ...myIssues?.filter,
+        ...(teamId ? { team_id: teamId } : {}),
       });
       qc.setQueryData<ListIssuesCache>(queryKey, (old) => {
         if (!old) return old;
@@ -89,7 +95,7 @@ export function useLoadMoreByStatus(
     } finally {
       setIsLoading(false);
     }
-  }, [qc, queryKey, status, loaded, hasMore, isLoading, myIssues?.filter]);
+  }, [qc, queryKey, status, loaded, hasMore, isLoading, myIssues?.filter, teamId]);
 
   return { loadMore, hasMore, isLoading, total };
 }
@@ -104,9 +110,12 @@ export function useCreateIssue() {
   return useMutation({
     mutationFn: (data: CreateIssueRequest) => api.createIssue(data),
     onSuccess: (newIssue) => {
-      qc.setQueryData<ListIssuesCache>(issueKeys.list(wsId), (old) =>
-        old ? addIssueToBuckets(old, newIssue) : old,
-      );
+      // Add to ALL matching list caches (workspace + team-filtered).
+      const listCaches = qc.getQueriesData<ListIssuesCache>({ queryKey: issueKeys.list(wsId) });
+      for (const [key, cache] of listCaches) {
+        if (!cache) continue;
+        qc.setQueryData<ListIssuesCache>(key, addIssueToBuckets(cache, newIssue));
+      }
       // Surface the just-created issue in cmd+k's Recent list without
       // requiring the user to open it first.
       useRecentIssuesStore.getState().recordVisit(newIssue.id);
@@ -118,6 +127,8 @@ export function useCreateIssue() {
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: issueKeys.list(wsId) });
+      qc.invalidateQueries({ queryKey: cycleKeys.all(wsId) });
+      qc.invalidateQueries({ queryKey: dashboardKeys.all(wsId) });
     },
   });
 }
@@ -133,6 +144,7 @@ export function useUpdateIssue() {
       // cache update happens in the same tick as mutate(). Awaiting would
       // yield to the event loop, letting @dnd-kit reset its visual state
       // before the optimistic update lands.
+      // Cancel and patch ALL issue list caches (workspace-wide + team-filtered).
       qc.cancelQueries({ queryKey: issueKeys.list(wsId) });
       const prevList = qc.getQueryData<ListIssuesCache>(issueKeys.list(wsId));
       const prevDetail = qc.getQueryData<Issue>(issueKeys.detail(wsId, id));
@@ -148,9 +160,16 @@ export function useUpdateIssue() {
         ? qc.getQueryData<Issue[]>(issueKeys.children(wsId, parentId))
         : undefined;
 
-      qc.setQueryData<ListIssuesCache>(issueKeys.list(wsId), (old) =>
-        old ? patchIssueInBuckets(old, id, data) : old,
-      );
+      // Optimistically update ALL matching list caches (workspace + team-filtered).
+      const listCaches = qc.getQueriesData<ListIssuesCache>({ queryKey: issueKeys.list(wsId) });
+      const prevLists = new Map<string, ListIssuesCache>();
+      for (const [key, cache] of listCaches) {
+        if (!cache) continue;
+        const keyStr = JSON.stringify(key);
+        prevLists.set(keyStr, cache);
+        qc.setQueryData<ListIssuesCache>(key, patchIssueInBuckets(cache, id, data));
+      }
+
       qc.setQueryData<Issue>(issueKeys.detail(wsId, id), (old) =>
         old ? { ...old, ...data } : old,
       );
@@ -161,10 +180,14 @@ export function useUpdateIssue() {
             old?.map((c) => (c.id === id ? { ...c, ...data } : c)),
         );
       }
-      return { prevList, prevDetail, prevChildren, parentId, id };
+      return { prevLists, prevDetail, prevChildren, parentId, id };
     },
     onError: (_err, _vars, ctx) => {
-      if (ctx?.prevList) qc.setQueryData(issueKeys.list(wsId), ctx.prevList);
+      if (ctx?.prevLists) {
+        for (const [keyStr, cache] of ctx.prevLists) {
+          qc.setQueryData(JSON.parse(keyStr), cache);
+        }
+      }
       if (ctx?.prevDetail)
         qc.setQueryData(issueKeys.detail(wsId, ctx.id), ctx.prevDetail);
       if (ctx?.parentId && ctx.prevChildren !== undefined) {
@@ -177,6 +200,8 @@ export function useUpdateIssue() {
     onSettled: (_data, _err, vars, ctx) => {
       qc.invalidateQueries({ queryKey: issueKeys.detail(wsId, vars.id) });
       qc.invalidateQueries({ queryKey: issueKeys.list(wsId) });
+      qc.invalidateQueries({ queryKey: cycleKeys.all(wsId) });
+      qc.invalidateQueries({ queryKey: dashboardKeys.all(wsId) });
       // Invalidate old parent's children cache
       if (ctx?.parentId) {
         qc.invalidateQueries({
@@ -203,19 +228,32 @@ export function useDeleteIssue() {
     mutationFn: (id: string) => api.deleteIssue(id),
     onMutate: async (id) => {
       await qc.cancelQueries({ queryKey: issueKeys.list(wsId) });
-      const prevList = qc.getQueryData<ListIssuesCache>(issueKeys.list(wsId));
-      const deleted = prevList ? findIssueLocation(prevList, id)?.issue : undefined;
-      qc.setQueryData<ListIssuesCache>(issueKeys.list(wsId), (old) =>
-        old ? removeIssueFromBuckets(old, id) : old,
-      );
+      const listCaches = qc.getQueriesData<ListIssuesCache>({ queryKey: issueKeys.list(wsId) });
+      const prevLists = new Map<string, ListIssuesCache>();
+      let parentIssueId: string | undefined;
+      for (const [key, cache] of listCaches) {
+        if (!cache) continue;
+        const keyStr = JSON.stringify(key);
+        prevLists.set(keyStr, cache);
+        if (!parentIssueId) {
+          parentIssueId = findIssueLocation(cache, id)?.issue.parent_issue_id ?? undefined;
+        }
+        qc.setQueryData<ListIssuesCache>(key, removeIssueFromBuckets(cache, id));
+      }
       qc.removeQueries({ queryKey: issueKeys.detail(wsId, id) });
-      return { prevList, parentIssueId: deleted?.parent_issue_id };
+      return { prevLists, parentIssueId };
     },
     onError: (_err, _id, ctx) => {
-      if (ctx?.prevList) qc.setQueryData(issueKeys.list(wsId), ctx.prevList);
+      if (ctx?.prevLists) {
+        for (const [keyStr, cache] of ctx.prevLists) {
+          qc.setQueryData(JSON.parse(keyStr), cache);
+        }
+      }
     },
     onSettled: (_data, _err, _id, ctx) => {
       qc.invalidateQueries({ queryKey: issueKeys.list(wsId) });
+      qc.invalidateQueries({ queryKey: cycleKeys.all(wsId) });
+      qc.invalidateQueries({ queryKey: dashboardKeys.all(wsId) });
       if (ctx?.parentIssueId) {
         qc.invalidateQueries({ queryKey: issueKeys.children(wsId, ctx.parentIssueId) });
         qc.invalidateQueries({ queryKey: issueKeys.childProgress(wsId) });
@@ -251,6 +289,8 @@ export function useBatchUpdateIssues() {
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: issueKeys.list(wsId) });
+      qc.invalidateQueries({ queryKey: cycleKeys.all(wsId) });
+      qc.invalidateQueries({ queryKey: dashboardKeys.all(wsId) });
     },
   });
 }
@@ -283,6 +323,8 @@ export function useBatchDeleteIssues() {
     },
     onSettled: (_data, _err, _ids, ctx) => {
       qc.invalidateQueries({ queryKey: issueKeys.list(wsId) });
+      qc.invalidateQueries({ queryKey: cycleKeys.all(wsId) });
+      qc.invalidateQueries({ queryKey: dashboardKeys.all(wsId) });
       if (ctx?.parentIssueIds && ctx.parentIssueIds.size > 0) {
         for (const parentId of ctx.parentIssueIds) {
           qc.invalidateQueries({ queryKey: issueKeys.children(wsId, parentId) });

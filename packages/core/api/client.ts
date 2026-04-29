@@ -51,6 +51,7 @@ import type {
   CreateProjectRequest,
   UpdateProjectRequest,
   ListProjectsResponse,
+  ListRoadmapProjectsResponse,
   PinnedItem,
   CreatePinRequest,
   PinnedItemType,
@@ -80,6 +81,21 @@ import type {
   CreateCycleRequest,
   UpdateCycleRequest,
   ListCyclesResponse,
+  DashboardData,
+  WorkloadData,
+  WorkloadIssue,
+  Ticket,
+  TicketMessage,
+  ListTicketsResponse,
+  CreateTicketRequest,
+  UpdateTicketRequest,
+  ListTicketsParams,
+  SLAMonitor,
+  SLAPolicy,
+  CreateSLAPolicyRequest,
+  Client,
+  CreateClientRequest,
+  UpdateClientRequest,
 } from "../types";
 import type { OnboardingCompletionPath } from "../onboarding/types";
 import { type Logger, noopLogger } from "../logger";
@@ -723,8 +739,28 @@ export class ApiClient {
     google_client_id?: string;
     posthog_key?: string;
     posthog_host?: string;
+    slack_configured?: boolean;
   }> {
     return this.fetch("/api/config");
+  }
+
+  async listSlackChannels(): Promise<{ id: string; name: string }[]> {
+    return this.fetch("/api/slack/channels");
+  }
+
+  async sendTestReport(
+    channelId: string,
+    teamId: string,
+    reportType: "morning" | "evening" | "weekly" | "sprint"
+  ): Promise<void> {
+    return this.fetch("/api/slack/send-report", {
+      method: "POST",
+      body: JSON.stringify({
+        channel_id: channelId,
+        team_id: teamId,
+        report_type: reportType,
+      }),
+    });
   }
 
   // Workspaces
@@ -880,11 +916,13 @@ export class ApiClient {
   }
 
   // File Upload & Attachments
-  async uploadFile(file: File, opts?: { issueId?: string; commentId?: string }): Promise<Attachment> {
+  async uploadFile(file: File, opts?: { issueId?: string; commentId?: string; ticketId?: string; ticketMessageId?: string }): Promise<Attachment> {
     const formData = new FormData();
     formData.append("file", file);
     if (opts?.issueId) formData.append("issue_id", opts.issueId);
     if (opts?.commentId) formData.append("comment_id", opts.commentId);
+    if (opts?.ticketId) formData.append("ticket_id", opts.ticketId);
+    if (opts?.ticketMessageId) formData.append("ticket_message_id", opts.ticketMessageId);
 
     const rid = createRequestId();
     const start = Date.now();
@@ -992,6 +1030,12 @@ export class ApiClient {
 
   async deleteProject(id: string): Promise<void> {
     await this.fetch(`/api/projects/${id}`, { method: "DELETE" });
+  }
+
+  async listRoadmapProjects(params?: { team_id?: string }): Promise<ListRoadmapProjectsResponse> {
+    const search = new URLSearchParams();
+    if (params?.team_id) search.set("team_id", params.team_id);
+    return this.fetch(`/api/roadmap?${search}`);
   }
 
   // Labels
@@ -1191,5 +1235,173 @@ export class ApiClient {
 
   async completeCycle(id: string): Promise<Cycle> {
     return this.fetch(`/api/cycles/${id}/complete`, { method: "POST" });
+  }
+
+  // Dashboard
+
+  async getDashboard(cycleCount: number = 6): Promise<DashboardData> {
+    return this.fetch(`/api/dashboard?cycle_count=${cycleCount}`);
+  }
+
+  async getWorkload(): Promise<WorkloadData> {
+    return this.fetch("/api/workload");
+  }
+
+  async getWorkloadIssues(assigneeType: string, assigneeId: string): Promise<{ issues: WorkloadIssue[] }> {
+    return this.fetch(`/api/workload/issues?assignee_type=${assigneeType}&assignee_id=${assigneeId}`);
+  }
+
+  // SLA Policies
+
+  async listSLAPolicies(): Promise<SLAPolicy[]> {
+    return this.fetch("/api/sla-policies");
+  }
+
+  async getSLAPolicy(id: string): Promise<SLAPolicy> {
+    return this.fetch(`/api/sla-policies/${id}`);
+  }
+
+  async createSLAPolicy(data: CreateSLAPolicyRequest): Promise<SLAPolicy> {
+    return this.fetch("/api/sla-policies", { method: "POST", body: JSON.stringify(data) });
+  }
+
+  async updateSLAPolicy(id: string, data: CreateSLAPolicyRequest): Promise<SLAPolicy> {
+    return this.fetch(`/api/sla-policies/${id}`, { method: "PUT", body: JSON.stringify(data) });
+  }
+
+  async deleteSLAPolicy(id: string): Promise<void> {
+    return this.fetch(`/api/sla-policies/${id}`, { method: "DELETE" });
+  }
+
+  // Clients
+
+  async listClients(): Promise<Client[]> {
+    return this.fetch("/api/clients");
+  }
+
+  async getClient(id: string): Promise<Client> {
+    return this.fetch(`/api/clients/${id}`);
+  }
+
+  async createClient(data: CreateClientRequest): Promise<{ id: string; invitation_id: string; status: string }> {
+    return this.fetch("/api/clients", { method: "POST", body: JSON.stringify(data) });
+  }
+
+  async updateClient(id: string, data: UpdateClientRequest): Promise<{ id: string; status: string }> {
+    return this.fetch(`/api/clients/${id}`, { method: "PUT", body: JSON.stringify(data) });
+  }
+
+  async deleteClient(id: string): Promise<void> {
+    return this.fetch(`/api/clients/${id}`, { method: "DELETE" });
+  }
+
+  async listClientProjects(clientId: string): Promise<Project[]> {
+    return this.fetch(`/api/clients/${clientId}/projects`);
+  }
+
+  async addClientProject(clientId: string, projectId: string): Promise<void> {
+    return this.fetch(`/api/clients/${clientId}/projects/${projectId}`, { method: "POST" });
+  }
+
+  async removeClientProject(clientId: string, projectId: string): Promise<void> {
+    return this.fetch(`/api/clients/${clientId}/projects/${projectId}`, { method: "DELETE" });
+  }
+
+  // Tickets
+
+  async listTickets(params?: ListTicketsParams): Promise<ListTicketsResponse> {
+    const query = new URLSearchParams();
+    if (params?.internal_status) query.set("internal_status", params.internal_status);
+    if (params?.priority) query.set("priority", params.priority);
+    if (params?.project_id) query.set("project_id", params.project_id);
+    if (params?.assignee_id) query.set("assignee_id", params.assignee_id);
+    if (params?.client_id) query.set("client_id", params.client_id);
+    if (params?.limit) query.set("limit", String(params.limit));
+    if (params?.offset) query.set("offset", String(params.offset));
+    const qs = query.toString();
+    return this.fetch(`/api/tickets${qs ? `?${qs}` : ""}`);
+  }
+
+  async getTicket(id: string): Promise<Ticket> {
+    return this.fetch(`/api/tickets/${id}`);
+  }
+
+  async createTicket(data: CreateTicketRequest): Promise<Ticket> {
+    return this.fetch("/api/tickets", { method: "POST", body: JSON.stringify(data) });
+  }
+
+  async updateTicket(id: string, data: UpdateTicketRequest): Promise<Ticket> {
+    return this.fetch(`/api/tickets/${id}`, { method: "PUT", body: JSON.stringify(data) });
+  }
+
+  async deleteTicket(id: string): Promise<void> {
+    return this.fetch(`/api/tickets/${id}`, { method: "DELETE" });
+  }
+
+  async getSLAMonitor(): Promise<SLAMonitor> {
+    return this.fetch("/api/tickets/sla-monitor");
+  }
+
+  // Ticket Messages
+
+  async listTicketMessages(ticketId: string): Promise<TicketMessage[]> {
+    return this.fetch(`/api/tickets/${ticketId}/messages`);
+  }
+
+  async createTicketReply(ticketId: string, body: string): Promise<TicketMessage> {
+    return this.fetch(`/api/tickets/${ticketId}/replies`, { method: "POST", body: JSON.stringify({ body }) });
+  }
+
+  async createTicketNote(ticketId: string, body: string): Promise<TicketMessage> {
+    return this.fetch(`/api/tickets/${ticketId}/notes`, { method: "POST", body: JSON.stringify({ body }) });
+  }
+
+  // Ticket <-> Issue linking
+
+  async linkIssueToTicket(ticketId: string, issueId: string): Promise<void> {
+    return this.fetch(`/api/tickets/${ticketId}/link-issue`, { method: "POST", body: JSON.stringify({ issue_id: issueId }) });
+  }
+
+  async createIssueFromTicket(ticketId: string, teamId: string): Promise<Issue> {
+    return this.fetch(`/api/tickets/${ticketId}/create-issue`, { method: "POST", body: JSON.stringify({ team_id: teamId }) });
+  }
+
+  // Portal (client-facing)
+
+  async listPortalProjects(): Promise<Project[]> {
+    return this.fetch("/api/portal/projects");
+  }
+
+  async listPortalTickets(): Promise<Ticket[]> {
+    const res = await this.fetch<{ tickets: Ticket[] }>("/api/portal/tickets");
+    return res.tickets;
+  }
+
+  async getPortalTicket(id: string): Promise<Ticket> {
+    return this.fetch(`/api/portal/tickets/${id}`);
+  }
+
+  async createPortalTicket(data: CreateTicketRequest): Promise<Ticket> {
+    return this.fetch("/api/portal/tickets", { method: "POST", body: JSON.stringify(data) });
+  }
+
+  async resolvePortalTicket(id: string): Promise<Ticket> {
+    return this.fetch(`/api/portal/tickets/${id}/resolve`, { method: "POST" });
+  }
+
+  async reopenPortalTicket(id: string): Promise<Ticket> {
+    return this.fetch(`/api/portal/tickets/${id}/reopen`, { method: "POST" });
+  }
+
+  async listPortalTicketMessages(ticketId: string): Promise<TicketMessage[]> {
+    return this.fetch(`/api/portal/tickets/${ticketId}/messages`);
+  }
+
+  async createPortalTicketReply(ticketId: string, body: string): Promise<TicketMessage> {
+    return this.fetch(`/api/portal/tickets/${ticketId}/replies`, { method: "POST", body: JSON.stringify({ body }) });
+  }
+
+  async invitePortalTeammate(email: string): Promise<{ id: string; invitation_id: string; status: string }> {
+    return this.fetch("/api/portal/invite", { method: "POST", body: JSON.stringify({ email }) });
   }
 }

@@ -68,3 +68,6 @@ DELETE FROM team_member WHERE team_id = $1 AND member_id = $2;
 
 -- name: IsTeamMember :one
 SELECT EXISTS(SELECT 1 FROM team_member WHERE team_id = $1 AND member_id = $2);
+
+-- name: ListTeamsWithReportsEnabled :many
+SELECT * FROM team WHERE settings->'reports'->>'enabled' = 'true';

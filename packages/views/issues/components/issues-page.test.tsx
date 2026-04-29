@@ -260,6 +260,7 @@ const issueDefaults = {
   cycle_id: null,
   estimate: null,
   position: 0,
+  start_date: null,
 };
 
 const mockIssues: Issue[] = [

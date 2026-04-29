@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { ChevronRight, Maximize2, Minimize2, X as XIcon, UserMinus } from "lucide-react";
+import { CalendarDays, ChevronRight, Maximize2, Minimize2, X as XIcon, UserMinus } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useCreateProject } from "@multica/core/projects/mutations";
 import {
@@ -27,6 +27,7 @@ import {
 import { Popover, PopoverTrigger, PopoverContent } from "@multica/ui/components/ui/popover";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@multica/ui/components/ui/tooltip";
 import { Button } from "@multica/ui/components/ui/button";
+import { Calendar } from "@multica/ui/components/ui/calendar";
 import { EmojiPicker } from "@multica/ui/components/common/emoji-picker";
 import { ContentEditor, type ContentEditorRef, TitleEditor } from "../editor";
 import { PriorityIcon } from "../issues/components/priority-icon";
@@ -69,6 +70,10 @@ export function CreateProjectModal({ onClose, data }: { onClose: () => void; dat
   const [priority, setPriority] = useState<ProjectPriority>("none");
   const [leadType, setLeadType] = useState<"member" | "agent" | undefined>();
   const [leadId, setLeadId] = useState<string | undefined>();
+  const [startDate, setStartDate] = useState<string | undefined>();
+  const [targetDate, setTargetDate] = useState<string | undefined>();
+  const [startDateOpen, setStartDateOpen] = useState(false);
+  const [targetDateOpen, setTargetDateOpen] = useState(false);
   const [icon, setIcon] = useState<string | undefined>();
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -100,6 +105,8 @@ export function CreateProjectModal({ onClose, data }: { onClose: () => void; dat
         lead_type: leadType,
         lead_id: leadId,
         team_id: data?.team_id as string | undefined,
+        start_date: startDate,
+        target_date: targetDate,
       });
       onClose();
       toast.success("Project created");
@@ -338,6 +345,62 @@ export function CreateProjectModal({ onClose, data }: { onClose: () => void; dat
                     </div>
                   )}
               </div>
+            </PopoverContent>
+          </Popover>
+
+          <Popover open={startDateOpen} onOpenChange={setStartDateOpen}>
+            <PopoverTrigger render={<PillButton />}>
+              <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" />
+              {startDate ? (
+                <span>{new Date(startDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+              ) : (
+                <span className="text-muted-foreground">Start date</span>
+              )}
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="single"
+                selected={startDate ? new Date(startDate) : undefined}
+                onSelect={(d: Date | undefined) => {
+                  setStartDate(d ? d.toISOString() : undefined);
+                  setStartDateOpen(false);
+                }}
+              />
+              {startDate && (
+                <div className="border-t px-3 py-2">
+                  <Button variant="ghost" size="xs" onClick={() => { setStartDate(undefined); setStartDateOpen(false); }} className="text-muted-foreground hover:text-foreground">
+                    Clear date
+                  </Button>
+                </div>
+              )}
+            </PopoverContent>
+          </Popover>
+
+          <Popover open={targetDateOpen} onOpenChange={setTargetDateOpen}>
+            <PopoverTrigger render={<PillButton />}>
+              <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" />
+              {targetDate ? (
+                <span>{new Date(targetDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+              ) : (
+                <span className="text-muted-foreground">Target date</span>
+              )}
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="single"
+                selected={targetDate ? new Date(targetDate) : undefined}
+                onSelect={(d: Date | undefined) => {
+                  setTargetDate(d ? d.toISOString() : undefined);
+                  setTargetDateOpen(false);
+                }}
+              />
+              {targetDate && (
+                <div className="border-t px-3 py-2">
+                  <Button variant="ghost" size="xs" onClick={() => { setTargetDate(undefined); setTargetDateOpen(false); }} className="text-muted-foreground hover:text-foreground">
+                    Clear date
+                  </Button>
+                </div>
+              )}
             </PopoverContent>
           </Popover>
         </div>

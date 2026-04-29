@@ -40,6 +40,9 @@ type CycleProgressResponse struct {
 	Started           ScopeStats           `json:"started"`
 	Completed         ScopeStats           `json:"completed"`
 	Success           int                  `json:"success"`
+	Velocity          float64              `json:"velocity"`
+	CapacityPercent   float64              `json:"capacity_percent"`
+	ScopeCreep        float64              `json:"scope_creep"`
 	AssigneeBreakdown []BreakdownItem      `json:"assignee_breakdown"`
 	LabelBreakdown    []LabelBreakdownItem `json:"label_breakdown"`
 	PriorityBreakdown []BreakdownItem      `json:"priority_breakdown"`
@@ -63,6 +66,8 @@ type BreakdownItem struct {
 	CompletedCount  int64  `json:"completed_count"`
 	CompletedPoints int    `json:"completed_points"`
 	Percent         int    `json:"percent"`
+	Velocity        int    `json:"velocity,omitempty"`
+	CapacityPercent int    `json:"capacity_percent,omitempty"`
 }
 
 type LabelBreakdownItem struct {
@@ -179,15 +184,96 @@ func (h *Handler) GetCycle(w http.ResponseWriter, r *http.Request) {
 		progress.Success = int(math.Round((float64(snap.CompletedCount)*100 + float64(snap.StartedCount)*25) / float64(snap.TotalCount)))
 	}
 
+	// Velocity from last 3 completed cycles
+	if completedCycles, err := h.Queries.GetLastCompletedCyclesForTeam(r.Context(), cycle.TeamID); err == nil && len(completedCycles) > 0 {
+		sum := 0.0
+		for _, cc := range completedCycles {
+			count, _ := extractLastHistoryEntry(cc.CompletedScopeHistory)
+			sum += float64(count)
+		}
+		progress.Velocity = math.Round(sum/float64(len(completedCycles))*10) / 10
+		if progress.Velocity > 0 {
+			progress.CapacityPercent = math.Round(float64(snap.TotalCount) / progress.Velocity * 100)
+		}
+	}
+
+	// Scope creep from first scope_history entry
+	if cycle.ScopeHistory != nil {
+		var entries []struct {
+			Count int `json:"count"`
+		}
+		if err := json.Unmarshal(cycle.ScopeHistory, &entries); err == nil && len(entries) > 0 {
+			startScope := entries[0].Count
+			currentScope := int(snap.TotalCount)
+			if currentScope > 0 && startScope > 0 {
+				progress.ScopeCreep = math.Round(float64(currentScope-startScope) / float64(currentScope) * 100)
+			}
+		}
+	}
+
+	// Fetch per-assignee historical completed points for velocity.
+	type velKey struct{ aType, aID string }
+	assigneeVelocity := map[velKey]int{}
+
+	if histRows, herr := h.Queries.GetAssigneePointsForCompletedCycles(r.Context(), cycle.TeamID); herr == nil {
+		completedCycles, _ := h.Queries.GetLastCompletedCyclesForTeam(r.Context(), cycle.TeamID)
+		numCycles := len(completedCycles)
+		if numCycles == 0 {
+			numCycles = 1
+		}
+		for _, hr := range histRows {
+			key := velKey{hr.AssigneeType.String, uuidToString(hr.AssigneeID)}
+			assigneeVelocity[key] = int(math.Round(float64(hr.CompletedPoints) / float64(numCycles)))
+		}
+	}
+
 	if assignees, err := h.Queries.GetCycleAssigneeBreakdown(r.Context(), cycle.ID); err == nil {
 		progress.AssigneeBreakdown = make([]BreakdownItem, len(assignees))
 		for i, a := range assignees {
+			name := ""
+			if s, ok := a.AssigneeName.(string); ok {
+				name = s
+			}
+			aID := uuidToString(a.AssigneeID)
+			vel := assigneeVelocity[velKey{a.AssigneeType.String, aID}]
+			if vel == 0 {
+				vel = 25
+			}
+			capPct := 0
+			if vel > 0 {
+				capPct = int(math.Round(float64(a.TotalPoints) / float64(vel) * 100))
+			}
 			progress.AssigneeBreakdown[i] = BreakdownItem{
-				ID: uuidToString(a.AssigneeID), ActorType: a.AssigneeType.String,
+				ID: aID, ActorType: a.AssigneeType.String, Name: name,
 				TotalCount: a.TotalCount, TotalPoints: int(a.TotalPoints),
 				CompletedCount: a.CompletedCount, CompletedPoints: int(a.CompletedPoints),
-				Percent: cyclePct(a.CompletedCount, a.TotalCount),
+				Percent:         cyclePct(a.CompletedCount, a.TotalCount),
+				Velocity:        vel,
+				CapacityPercent: capPct,
 			}
+		}
+	}
+	// Add team members who have no issues in this cycle so the UI can show everyone.
+	if teamMembers, tmErr := h.Queries.ListTeamMembers(r.Context(), cycle.TeamID); tmErr == nil {
+		existing := map[string]bool{}
+		for _, b := range progress.AssigneeBreakdown {
+			existing[b.ID] = true
+		}
+		for _, tm := range teamMembers {
+			uid := uuidToString(tm.UserID)
+			if existing[uid] {
+				continue
+			}
+			vel := assigneeVelocity[velKey{"member", uid}]
+			if vel == 0 {
+				vel = 25
+			}
+			progress.AssigneeBreakdown = append(progress.AssigneeBreakdown, BreakdownItem{
+				ID: uid, ActorType: "member", Name: tm.Name,
+				TotalCount: 0, TotalPoints: 0,
+				CompletedCount: 0, CompletedPoints: 0,
+				Percent: 0, Velocity: vel, CapacityPercent: 0,
+			})
 		}
 	}
 	if progress.AssigneeBreakdown == nil {

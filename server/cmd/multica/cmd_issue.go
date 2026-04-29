@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -178,6 +179,8 @@ func init() {
 	issueListCmd.Flags().String("priority", "", "Filter by priority")
 	issueListCmd.Flags().String("assignee", "", "Filter by assignee name")
 	issueListCmd.Flags().String("project", "", "Filter by project ID")
+	issueListCmd.Flags().String("team", "", "Filter by team ID or name")
+	issueListCmd.Flags().String("label", "", "Filter by label name")
 	issueListCmd.Flags().Int("limit", 50, "Maximum number of issues to return")
 	issueListCmd.Flags().Int("offset", 0, "Number of issues to skip (for pagination)")
 
@@ -192,7 +195,12 @@ func init() {
 	issueCreateCmd.Flags().String("assignee", "", "Assignee name (member or agent)")
 	issueCreateCmd.Flags().String("parent", "", "Parent issue ID")
 	issueCreateCmd.Flags().String("project", "", "Project ID")
+	issueCreateCmd.Flags().String("team", "", "Team ID or name")
+	issueCreateCmd.Flags().String("cycle", "", "Cycle ID")
+	issueCreateCmd.Flags().Int("estimate", 0, "Point estimate (1,2,3,5,8,13)")
 	issueCreateCmd.Flags().String("due-date", "", "Due date (RFC3339 format)")
+	issueCreateCmd.Flags().String("start-date", "", "Start date (YYYY-MM-DD format)")
+	issueCreateCmd.Flags().StringSlice("label", nil, "Label name(s) to apply (can be specified multiple times)")
 	issueCreateCmd.Flags().String("output", "json", "Output format: table or json")
 	issueCreateCmd.Flags().StringSlice("attachment", nil, "File path(s) to attach (can be specified multiple times)")
 
@@ -202,9 +210,13 @@ func init() {
 	issueUpdateCmd.Flags().String("status", "", "New status")
 	issueUpdateCmd.Flags().String("priority", "", "New priority")
 	issueUpdateCmd.Flags().String("assignee", "", "New assignee name (member or agent)")
-	issueUpdateCmd.Flags().String("project", "", "Project ID")
-	issueUpdateCmd.Flags().String("due-date", "", "New due date (RFC3339 format)")
+	issueUpdateCmd.Flags().String("project", "", "Project ID (use --project \"\" to clear)")
+	issueUpdateCmd.Flags().String("cycle", "", "Cycle ID (use --cycle \"\" to clear)")
+	issueUpdateCmd.Flags().Int("estimate", 0, "Point estimate (1,2,3,5,8,13; use --estimate 0 to clear)")
+	issueUpdateCmd.Flags().String("due-date", "", "New due date (RFC3339 format; use --due-date \"\" to clear)")
+	issueUpdateCmd.Flags().String("start-date", "", "Start date (YYYY-MM-DD; use --start-date \"\" to clear)")
 	issueUpdateCmd.Flags().String("parent", "", "Parent issue ID (use --parent \"\" to clear)")
+	issueUpdateCmd.Flags().StringSlice("label", nil, "Label name(s) to set (replaces all existing labels)")
 	issueUpdateCmd.Flags().String("output", "json", "Output format: table or json")
 
 	// issue status
@@ -298,6 +310,13 @@ func runIssueList(cmd *cobra.Command, _ []string) error {
 	if v, _ := cmd.Flags().GetString("project"); v != "" {
 		params.Set("project_id", v)
 	}
+	if v, _ := cmd.Flags().GetString("team"); v != "" {
+		teamID, resolveErr := resolveTeam(ctx, client, v)
+		if resolveErr != nil {
+			return fmt.Errorf("resolve team: %w", resolveErr)
+		}
+		params.Set("team_id", teamID)
+	}
 
 	path := "/api/issues"
 	if len(params) > 0 {
@@ -327,7 +346,7 @@ func runIssueList(cmd *cobra.Command, _ []string) error {
 		return cli.PrintJSON(os.Stdout, wrapped)
 	}
 
-	headers := []string{"ID", "TITLE", "STATUS", "PRIORITY", "ASSIGNEE", "DUE DATE"}
+	headers := []string{"ID", "IDENTIFIER", "TITLE", "STATUS", "PRIORITY", "ASSIGNEE", "ESTIMATE", "DUE DATE"}
 	rows := make([][]string, 0, len(issuesRaw))
 	for _, raw := range issuesRaw {
 		issue, ok := raw.(map[string]any)
@@ -339,12 +358,20 @@ func runIssueList(cmd *cobra.Command, _ []string) error {
 		if dueDate != "" && len(dueDate) >= 10 {
 			dueDate = dueDate[:10]
 		}
+		estimate := ""
+		if v, ok := issue["estimate"]; ok && v != nil {
+			if n, ok := v.(float64); ok && n > 0 {
+				estimate = strconv.Itoa(int(n))
+			}
+		}
 		rows = append(rows, []string{
 			truncateID(strVal(issue, "id")),
+			strVal(issue, "identifier"),
 			strVal(issue, "title"),
 			strVal(issue, "status"),
 			strVal(issue, "priority"),
 			assignee,
+			estimate,
 			dueDate,
 		})
 	}
@@ -429,6 +456,23 @@ func runIssueCreate(cmd *cobra.Command, _ []string) error {
 	if v, _ := cmd.Flags().GetString("due-date"); v != "" {
 		body["due_date"] = v
 	}
+	if v, _ := cmd.Flags().GetString("start-date"); v != "" {
+		body["start_date"] = v
+	}
+	if v, _ := cmd.Flags().GetString("team"); v != "" {
+		teamID, resolveErr := resolveTeam(ctx, client, v)
+		if resolveErr != nil {
+			return fmt.Errorf("resolve team: %w", resolveErr)
+		}
+		body["team_id"] = teamID
+	}
+	if v, _ := cmd.Flags().GetString("cycle"); v != "" {
+		body["cycle_id"] = v
+	}
+	if cmd.Flags().Changed("estimate") {
+		v, _ := cmd.Flags().GetInt("estimate")
+		body["estimate"] = v
+	}
 	if v, _ := cmd.Flags().GetString("assignee"); v != "" {
 		aType, aID, resolveErr := resolveAssignee(ctx, client, v)
 		if resolveErr != nil {
@@ -443,8 +487,23 @@ func runIssueCreate(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("create issue: %w", err)
 	}
 
-	// Upload attachments and link them to the newly created issue.
+	// Apply labels if specified.
+	labels, _ := cmd.Flags().GetStringSlice("label")
 	issueID := strVal(result, "id")
+	if len(labels) > 0 && issueID != "" {
+		labelIDs, resolveErr := resolveLabels(ctx, client, labels)
+		if resolveErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: could not resolve labels: %v\n", resolveErr)
+		} else if len(labelIDs) > 0 {
+			labelBody := map[string]any{"label_ids": labelIDs}
+			var labelResult any
+			if err := client.PutJSON(ctx, "/api/issues/"+issueID+"/labels", labelBody, &labelResult); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: could not set labels: %v\n", err)
+			}
+		}
+	}
+
+	// Upload attachments and link them to the newly created issue.
 	for _, filePath := range attachments {
 		data, readErr := os.ReadFile(filePath)
 		if readErr != nil {
@@ -523,14 +582,60 @@ func runIssueUpdate(cmd *cobra.Command, args []string) error {
 			body["parent_issue_id"] = v
 		}
 	}
+	if cmd.Flags().Changed("cycle") {
+		v, _ := cmd.Flags().GetString("cycle")
+		if v == "" {
+			body["cycle_id"] = nil
+		} else {
+			body["cycle_id"] = v
+		}
+	}
+	if cmd.Flags().Changed("estimate") {
+		v, _ := cmd.Flags().GetInt("estimate")
+		if v == 0 {
+			body["estimate"] = nil
+		} else {
+			body["estimate"] = v
+		}
+	}
+	if cmd.Flags().Changed("start-date") {
+		v, _ := cmd.Flags().GetString("start-date")
+		if v == "" {
+			body["start_date"] = nil
+		} else {
+			body["start_date"] = v
+		}
+	}
 
-	if len(body) == 0 {
-		return fmt.Errorf("no fields to update; use flags like --title, --status, --priority, --assignee, etc.")
+	labels, _ := cmd.Flags().GetStringSlice("label")
+	hasLabels := cmd.Flags().Changed("label")
+
+	if len(body) == 0 && !hasLabels {
+		return fmt.Errorf("no fields to update; use flags like --title, --status, --priority, --assignee, --estimate, --cycle, --label, etc.")
 	}
 
 	var result map[string]any
-	if err := client.PutJSON(ctx, "/api/issues/"+args[0], body, &result); err != nil {
-		return fmt.Errorf("update issue: %w", err)
+	if len(body) > 0 {
+		if err := client.PutJSON(ctx, "/api/issues/"+args[0], body, &result); err != nil {
+			return fmt.Errorf("update issue: %w", err)
+		}
+	}
+
+	// Apply labels if specified.
+	if hasLabels {
+		labelIDs, resolveErr := resolveLabels(ctx, client, labels)
+		if resolveErr != nil {
+			return fmt.Errorf("resolve labels: %w", resolveErr)
+		}
+		labelBody := map[string]any{"label_ids": labelIDs}
+		var labelResult any
+		if err := client.PutJSON(ctx, "/api/issues/"+args[0]+"/labels", labelBody, &labelResult); err != nil {
+			return fmt.Errorf("set labels: %w", err)
+		}
+		// Re-fetch the issue to get updated labels in output.
+		if err := client.GetJSON(ctx, "/api/issues/"+args[0], &result); err != nil {
+			return fmt.Errorf("get updated issue: %w", err)
+		}
 	}
 
 	output, _ := cmd.Flags().GetString("output")
@@ -1179,6 +1284,79 @@ func ambiguousAssigneeError(input string, matches []assigneeMatch) error {
 		parts = append(parts, fmt.Sprintf("  %s %q (%s)", m.Type, m.Name, truncateID(m.ID)))
 	}
 	return fmt.Errorf("ambiguous assignee %q; matches:\n%s", input, strings.Join(parts, "\n"))
+}
+
+// resolveTeam resolves a team by ID, identifier, or name (substring match).
+func resolveTeam(ctx context.Context, client *cli.APIClient, input string) (string, error) {
+	var teams []map[string]any
+	if err := client.GetJSON(ctx, "/api/teams", &teams); err != nil {
+		return "", fmt.Errorf("fetch teams: %w", err)
+	}
+
+	inputLower := strings.ToLower(strings.TrimSpace(input))
+	var idMatches, exactMatches, substringMatches []map[string]any
+
+	for _, t := range teams {
+		tid := strVal(t, "id")
+		name := strVal(t, "name")
+		identifier := strVal(t, "identifier")
+
+		if strings.EqualFold(tid, input) || strings.EqualFold(truncateID(tid), input) {
+			idMatches = append(idMatches, t)
+			continue
+		}
+		if strings.EqualFold(identifier, input) || strings.EqualFold(name, input) {
+			exactMatches = append(exactMatches, t)
+			continue
+		}
+		if strings.Contains(strings.ToLower(name), inputLower) || strings.Contains(strings.ToLower(identifier), inputLower) {
+			substringMatches = append(substringMatches, t)
+		}
+	}
+
+	for _, bucket := range [][]map[string]any{idMatches, exactMatches, substringMatches} {
+		switch len(bucket) {
+		case 0:
+			continue
+		case 1:
+			return strVal(bucket[0], "id"), nil
+		default:
+			names := make([]string, len(bucket))
+			for i, t := range bucket {
+				names[i] = fmt.Sprintf("  %q (%s)", strVal(t, "name"), strVal(t, "identifier"))
+			}
+			return "", fmt.Errorf("ambiguous team %q; matches:\n%s", input, strings.Join(names, "\n"))
+		}
+	}
+	return "", fmt.Errorf("no team found matching %q", input)
+}
+
+// resolveLabels resolves label names to IDs.
+func resolveLabels(ctx context.Context, client *cli.APIClient, names []string) ([]string, error) {
+	var resp map[string]any
+	if err := client.GetJSON(ctx, "/api/labels", &resp); err != nil {
+		return nil, fmt.Errorf("fetch labels: %w", err)
+	}
+
+	labelsRaw, _ := resp["labels"].([]any)
+	labelMap := make(map[string]string) // lowercase name -> id
+	for _, raw := range labelsRaw {
+		l, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		labelMap[strings.ToLower(strVal(l, "name"))] = strVal(l, "id")
+	}
+
+	var ids []string
+	for _, name := range names {
+		id, ok := labelMap[strings.ToLower(strings.TrimSpace(name))]
+		if !ok {
+			return nil, fmt.Errorf("label %q not found", name)
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
 }
 
 func formatAssignee(issue map[string]any) string {

@@ -18,6 +18,9 @@ import (
 const cycleSweepInterval = 10 * time.Minute
 
 func runCycleSweeper(ctx context.Context, queries *db.Queries, bus *events.Bus) {
+	// Run immediately on startup so cycles appear without waiting for the first tick.
+	sweepCycles(ctx, queries, bus)
+
 	ticker := time.NewTicker(cycleSweepInterval)
 	defer ticker.Stop()
 
@@ -50,6 +53,8 @@ func sweepCycles(ctx context.Context, queries *db.Queries, bus *events.Bus) {
 func advanceCycleStatus(ctx context.Context, queries *db.Queries, bus *events.Bus, team db.Team, now time.Time) {
 	active, err := queries.GetActiveCycleForTeam(ctx, team.ID)
 	if err != nil {
+		// No active cycle — check if a planned cycle should start
+		activatePlannedCycle(ctx, queries, bus, team, now)
 		return
 	}
 
@@ -112,6 +117,29 @@ func advanceCycleStatus(ctx context.Context, queries *db.Queries, bus *events.Bu
 	}
 }
 
+func activatePlannedCycle(ctx context.Context, queries *db.Queries, bus *events.Bus, team db.Team, now time.Time) {
+	planned, err := queries.ListCyclesByStatus(ctx, db.ListCyclesByStatusParams{
+		TeamID: team.ID, Status: "planned",
+	})
+	if err != nil || len(planned) == 0 {
+		return
+	}
+
+	first := planned[0]
+	if first.StartsAt.Time.After(now) {
+		return
+	}
+
+	wsID := util.UUIDToString(team.WorkspaceID)
+	activated, err := queries.UpdateCycle(ctx, db.UpdateCycleParams{
+		ID:     first.ID,
+		Status: pgtype.Text{String: "active", Valid: true},
+	})
+	if err == nil {
+		bus.Publish(events.Event{Type: protocol.EventCycleStarted, WorkspaceID: wsID, Payload: cyclePayload(activated)})
+	}
+}
+
 func autoCreateCycles(ctx context.Context, queries *db.Queries, bus *events.Bus, team db.Team, now time.Time) {
 	var settings struct {
 		Cycles struct {
@@ -161,7 +189,7 @@ func autoCreateCycles(ctx context.Context, queries *db.Queries, bus *events.Bus,
 		cycle, err := queries.CreateCycle(ctx, db.CreateCycleParams{
 			WorkspaceID: team.WorkspaceID,
 			TeamID:      team.ID,
-			Name:        fmt.Sprintf("Cycle %d", num),
+			Name:        fmt.Sprintf("%s - Cycle %d", team.Identifier, num),
 			Number:      num,
 			Status:      "planned",
 			StartsAt:    pgtype.Timestamptz{Time: start, Valid: true},

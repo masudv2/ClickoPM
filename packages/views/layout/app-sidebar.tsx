@@ -33,6 +33,10 @@ import {
   Loader2,
   X,
   Zap,
+  LayoutDashboard,
+  BarChart3,
+  GanttChart,
+  TicketIcon,
 } from "lucide-react";
 import { WorkspaceAvatar } from "../workspace/workspace-avatar";
 import { ActorAvatar } from "@multica/ui/components/common/actor-avatar";
@@ -64,7 +68,7 @@ import {
 } from "@multica/ui/components/ui/dropdown-menu";
 import { useAuthStore } from "@multica/core/auth";
 import { useCurrentWorkspace, useWorkspacePaths, paths } from "@multica/core/paths";
-import { workspaceListOptions, myInvitationListOptions, workspaceKeys } from "@multica/core/workspace/queries";
+import { workspaceListOptions, myInvitationListOptions, workspaceKeys, memberListOptions } from "@multica/core/workspace/queries";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { inboxKeys, deduplicateInboxItems } from "@multica/core/inbox/queries";
 import { chatSessionsOptions, pendingChatTasksOptions } from "@multica/core/chat/queries";
@@ -95,6 +99,9 @@ const EMPTY_CHAT_SESSIONS: Awaited<ReturnType<typeof api.listChatSessions>> = []
 // against the current workspace slug at render time (see AppSidebar body).
 // Only parameterless paths are valid nav destinations.
 type NavKey =
+  | "dashboard"
+  | "workload"
+  | "roadmap"
   | "inbox"
   | "chat"
   | "myIssues"
@@ -102,6 +109,7 @@ type NavKey =
   | "projects"
   | "autopilots"
   | "agents"
+  | "tickets"
   | "runtimes"
   | "skills"
   | "settings";
@@ -115,6 +123,7 @@ const personalNav: { key: NavKey; label: string; icon: typeof Inbox }[] = [
 const workspaceNav: { key: NavKey; label: string; icon: typeof Inbox }[] = [
   { key: "autopilots", label: "Autopilot", icon: Zap },
   { key: "agents", label: "Agents", icon: Bot },
+  { key: "tickets", label: "Tickets", icon: TicketIcon },
 ];
 
 const configureNav: { key: NavKey; label: string; icon: typeof Inbox }[] = [
@@ -318,6 +327,12 @@ export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }
   const { data: myInvitations = EMPTY_INVITATIONS } = useQuery(myInvitationListOptions());
 
   const wsId = workspace?.id;
+  const { data: members = [] } = useQuery({
+    ...memberListOptions(wsId ?? ""),
+    enabled: !!wsId,
+  });
+  const currentMember = members.find((m: { user_id: string }) => m.user_id === user?.id);
+  const isAdminOrOwner = currentMember?.role === "owner" || currentMember?.role === "admin";
   const { data: inboxItems = EMPTY_INBOX } = useQuery({
     queryKey: wsId ? inboxKeys.list(wsId) : ["inbox", "disabled"],
     queryFn: () => api.listInbox(),
@@ -425,10 +440,13 @@ export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }
         if (isEditable) return;
         if (useModalStore.getState().modal) return;
         e.preventDefault();
-        // Auto-fill project when on a project detail page
+        // Auto-fill context from URL
+        const data: Record<string, string> = {};
         const projectMatch = pathname.match(/^\/[^/]+\/projects\/([^/]+)$/);
-        const data = projectMatch ? { project_id: projectMatch[1] } : undefined;
-        useModalStore.getState().open("create-issue", data);
+        if (projectMatch) data.project_id = projectMatch[1]!;
+        const teamMatch = pathname.match(/^\/[^/]+\/team\/([^/]+)/);
+        if (teamMatch) data.team_identifier = teamMatch[1]!;
+        useModalStore.getState().open("create-issue", Object.keys(data).length > 0 ? data : undefined);
       }
     };
     document.addEventListener("keydown", handleKeyDown);
@@ -562,7 +580,11 @@ export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }
             <SidebarMenuItem>
               <SidebarMenuButton
                 className="text-muted-foreground"
-                onClick={() => useModalStore.getState().open("create-issue")}
+                onClick={() => {
+                  const teamMatch = pathname.match(/^\/[^/]+\/team\/([^/]+)/);
+                  const data = teamMatch ? { team_identifier: teamMatch[1]! } : undefined;
+                  useModalStore.getState().open("create-issue", data);
+                }}
               >
                 <span className="relative">
                   <SquarePen />
@@ -580,6 +602,54 @@ export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }
           <SidebarGroup>
             <SidebarGroupContent>
               <SidebarMenu className="gap-0.5">
+                {isAdminOrOwner && (() => {
+                  const href = p.dashboard();
+                  const isActive = pathname === href;
+                  return (
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        isActive={isActive}
+                        render={<AppLink href={href} />}
+                        className="text-muted-foreground hover:not-data-active:bg-sidebar-accent/70 data-active:bg-sidebar-accent data-active:text-sidebar-accent-foreground"
+                      >
+                        <LayoutDashboard />
+                        <span>Dashboard</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })()}
+                {isAdminOrOwner && (() => {
+                  const href = p.workload();
+                  const isActive = pathname === href;
+                  return (
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        isActive={isActive}
+                        render={<AppLink href={href} />}
+                        className="text-muted-foreground hover:not-data-active:bg-sidebar-accent/70 data-active:bg-sidebar-accent data-active:text-sidebar-accent-foreground"
+                      >
+                        <BarChart3 />
+                        <span>Workload</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })()}
+                {(() => {
+                  const href = p.roadmap();
+                  const isActive = pathname === href;
+                  return (
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        isActive={isActive}
+                        render={<AppLink href={href} />}
+                        className="text-muted-foreground hover:not-data-active:bg-sidebar-accent/70 data-active:bg-sidebar-accent data-active:text-sidebar-accent-foreground"
+                      >
+                        <GanttChart />
+                        <span>Roadmap</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })()}
                 {personalNav.map((item) => {
                   const href = p[item.key]();
                   const isActive = pathname === href;

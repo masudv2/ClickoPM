@@ -52,6 +52,13 @@ WHERE workspace_id = $1 AND recipient_type = 'member' AND recipient_id = $2 AND 
 UPDATE inbox_item SET archived = true
 WHERE workspace_id = $1 AND recipient_type = 'member' AND recipient_id = $2 AND read = true AND archived = false;
 
+-- name: ExistsSLABreachInbox :one
+SELECT EXISTS (
+  SELECT 1 FROM inbox_item
+  WHERE workspace_id = $1 AND recipient_id = $2 AND type = 'sla_breach'
+    AND archived = false AND details @> $3::jsonb
+) AS exists;
+
 -- name: ArchiveCompletedInbox :execrows
 UPDATE inbox_item i SET archived = true
 WHERE i.workspace_id = $1 AND i.recipient_type = 'member' AND i.recipient_id = $2 AND i.archived = false

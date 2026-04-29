@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@multica/core/api";
+import { useAuthStore } from "@multica/core/auth";
 import {
   workspaceKeys,
   workspaceListOptions,
@@ -63,6 +64,9 @@ export function InvitePage({ invitationId, onBack }: InvitePageProps) {
     try {
       await api.acceptInvitation(invitationId);
       setDone("accepted");
+      // Refresh user so onboarded_at is up-to-date (backend auto-marks
+      // client-role users as onboarded during invite acceptance).
+      await useAuthStore.getState().refreshMe();
       // Fetch the refreshed workspace list so we know the joined workspace's slug.
       const nextList = await qc.fetchQuery({
         ...workspaceListOptions(),
@@ -70,10 +74,12 @@ export function InvitePage({ invitationId, onBack }: InvitePageProps) {
       });
       const joined = nextList.find((w) => w.id === invitation?.workspace_id);
       qc.invalidateQueries({ queryKey: workspaceKeys.myInvitations() });
-      // Navigate into the joined workspace. The [workspaceSlug]/layout will
-      // sync api client, stores, and the last_workspace_slug cookie from the URL.
+      // Route client-role users directly to the portal.
+      const isClient = invitation?.role === "client";
       const dest = joined
-        ? paths.workspace(joined.slug).issues()
+        ? isClient
+          ? paths.workspace(joined.slug).portal()
+          : paths.workspace(joined.slug).issues()
         : fallbackDest;
       setTimeout(() => push(dest), 1000);
     } catch (e) {

@@ -18,8 +18,9 @@ import type { UpdateIssueRequest } from "@multica/core/types";
 import { useIssueSelectionStore } from "@multica/core/issues/stores/selection-store";
 import { useBatchUpdateIssues, useBatchDeleteIssues } from "@multica/core/issues/mutations";
 import { StatusPicker, PriorityPicker, AssigneePicker } from "./pickers";
+import { CycleBatchPicker } from "../../cycles/components/cycle-batch-picker";
 
-export function BatchActionToolbar() {
+export function BatchActionToolbar({ teamId }: { teamId?: string } = {}) {
   const selectedIds = useIssueSelectionStore((s) => s.selectedIds);
   const clear = useIssueSelectionStore((s) => s.clear);
   const count = selectedIds.size;
@@ -104,6 +105,15 @@ export function BatchActionToolbar() {
           trigger="Assignee"
           align="center"
         />
+
+        {/* Cycle */}
+        {teamId && (
+          <CycleBatchPicker
+            teamId={teamId}
+            onUpdate={handleBatchUpdate}
+            disabled={loading}
+          />
+        )}
 
         {/* Delete */}
         <Button

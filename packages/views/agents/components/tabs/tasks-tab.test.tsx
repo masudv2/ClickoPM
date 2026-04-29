@@ -128,6 +128,7 @@ describe("TasksTab", () => {
           project_id: null,
           position: 1,
           due_date: null,
+          start_date: null,
           cycle_id: null,
           estimate: null,
           created_at: "2026-04-16T00:00:00Z",

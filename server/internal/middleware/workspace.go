@@ -167,6 +167,12 @@ func RequireWorkspaceRoleFromURL(queries *db.Queries, param string, roles ...str
 	}, roles)
 }
 
+// RequireInternalMember is like RequireWorkspaceMember but rejects clients.
+// Use this to protect internal routes that clients should not access.
+func RequireInternalMember(queries *db.Queries) func(http.Handler) http.Handler {
+	return buildMiddleware(queries, resolveWorkspaceUUID(queries), []string{"owner", "admin", "member"})
+}
+
 func buildMiddleware(queries *db.Queries, resolve workspaceResolver, roles []string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

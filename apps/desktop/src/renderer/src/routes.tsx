@@ -19,7 +19,14 @@ import { DesktopRuntimesPage } from "./components/desktop-runtimes-page";
 import { AgentsPage } from "@multica/views/agents";
 import { InboxPage } from "@multica/views/inbox";
 import { ChatPage } from "@multica/views/chat";
+import { DashboardPage } from "@multica/views/dashboard";
+import { WorkloadPage } from "@multica/views/workload";
+import { RoadmapPage } from "@multica/views/roadmap/components";
 import { SettingsPage } from "@multica/views/settings";
+import { PortalTicketListPage } from "@multica/views/portal";
+import { DesktopPortalTicketDetailPage } from "./pages/portal-ticket-detail-page";
+import { TicketsListPage } from "@multica/views/tickets/components";
+import { DesktopTicketDetailPage } from "./pages/ticket-detail-page";
 import { Download, Server } from "lucide-react";
 import { DaemonSettingsTab } from "./components/daemon-settings-tab";
 import { UpdatesSettingsTab } from "./components/updates-settings-tab";
@@ -82,6 +89,9 @@ export const appRoutes: RouteObject[] = [
         element: <WorkspaceRouteLayout />,
         children: [
           { index: true, element: <Navigate to="issues" replace /> },
+          { path: "dashboard", element: <DashboardPage />, handle: { title: "Dashboard" } },
+          { path: "workload", element: <WorkloadPage />, handle: { title: "Workload" } },
+          { path: "roadmap", element: <RoadmapPage />, handle: { title: "Roadmap" } },
           { path: "issues", element: <IssuesPage />, handle: { title: "Issues" } },
           {
             path: "issues/:id",
@@ -148,6 +158,26 @@ export const appRoutes: RouteObject[] = [
               />
             ),
             handle: { title: "Settings" },
+          },
+          {
+            path: "tickets",
+            element: <TicketsListPage />,
+            handle: { title: "Tickets" },
+          },
+          {
+            path: "tickets/:ticketId",
+            element: <DesktopTicketDetailPage />,
+            handle: { title: "Ticket" },
+          },
+          {
+            path: "portal/tickets",
+            element: <PortalTicketListPage />,
+            handle: { title: "Support Portal" },
+          },
+          {
+            path: "portal/tickets/:ticketId",
+            element: <DesktopPortalTicketDetailPage />,
+            handle: { title: "Ticket" },
           },
         ],
       },

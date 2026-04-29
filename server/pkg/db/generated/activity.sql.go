@@ -138,3 +138,52 @@ func (q *Queries) ListActivities(ctx context.Context, arg ListActivitiesParams) 
 	}
 	return items, nil
 }
+
+const listWorkspaceActivities = `-- name: ListWorkspaceActivities :many
+SELECT id, workspace_id, issue_id, actor_type, actor_id, action, details, created_at FROM activity_log
+WHERE workspace_id = $1
+  AND action = ANY($2::text[])
+ORDER BY created_at DESC
+LIMIT $3 OFFSET $4
+`
+
+type ListWorkspaceActivitiesParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	Column2     []string    `json:"column_2"`
+	Limit       int32       `json:"limit"`
+	Offset      int32       `json:"offset"`
+}
+
+func (q *Queries) ListWorkspaceActivities(ctx context.Context, arg ListWorkspaceActivitiesParams) ([]ActivityLog, error) {
+	rows, err := q.db.Query(ctx, listWorkspaceActivities,
+		arg.WorkspaceID,
+		arg.Column2,
+		arg.Limit,
+		arg.Offset,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ActivityLog{}
+	for rows.Next() {
+		var i ActivityLog
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.IssueID,
+			&i.ActorType,
+			&i.ActorID,
+			&i.Action,
+			&i.Details,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

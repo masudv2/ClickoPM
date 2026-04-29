@@ -33,6 +33,7 @@ function makeIssue(overrides: Partial<Issue> = {}): Issue {
     estimate: null,
     position: 0,
     due_date: null,
+    start_date: null,
     created_at: "2025-01-01T00:00:00Z",
     updated_at: "2025-01-01T00:00:00Z",
     ...overrides,

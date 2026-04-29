@@ -46,6 +46,7 @@ type IssueResponse struct {
 	Labels             []LabelResponse         `json:"labels"`
 	CycleID            *string                 `json:"cycle_id"`
 	Estimate           *int32                  `json:"estimate"`
+	StartDate          *string                 `json:"start_date"`
 }
 
 func issueToResponse(i db.Issue, issuePrefix string) IssueResponse {
@@ -72,6 +73,7 @@ func issueToResponse(i db.Issue, issuePrefix string) IssueResponse {
 		UpdatedAt:     timestampToString(i.UpdatedAt),
 		CycleID:       uuidToPtr(i.CycleID),
 		Estimate:      nullInt32Ptr(i.Estimate),
+		StartDate:     dateToPtr(i.StartDate),
 	}
 }
 
@@ -105,6 +107,9 @@ func issueListRowToResponse(i db.ListIssuesRow, issuePrefix string) IssueRespons
 		DueDate:       timestampToPtr(i.DueDate),
 		CreatedAt:     timestampToString(i.CreatedAt),
 		UpdatedAt:     timestampToString(i.UpdatedAt),
+		CycleID:       uuidToPtr(i.CycleID),
+		Estimate:      nullInt32Ptr(i.Estimate),
+		StartDate:     dateToPtr(i.StartDate),
 	}
 }
 
@@ -130,6 +135,9 @@ func openIssueRowToResponse(i db.ListOpenIssuesRow, issuePrefix string) IssueRes
 		DueDate:       timestampToPtr(i.DueDate),
 		CreatedAt:     timestampToString(i.CreatedAt),
 		UpdatedAt:     timestampToString(i.UpdatedAt),
+		CycleID:       uuidToPtr(i.CycleID),
+		Estimate:      nullInt32Ptr(i.Estimate),
+		StartDate:     dateToPtr(i.StartDate),
 	}
 }
 
@@ -856,6 +864,7 @@ type CreateIssueRequest struct {
 	ProjectID          *string  `json:"project_id"`
 	TeamID             string   `json:"team_id"`
 	DueDate            *string  `json:"due_date"`
+	StartDate          *string  `json:"start_date"`
 	AttachmentIDs      []string `json:"attachment_ids,omitempty"`
 	CycleID            *string  `json:"cycle_id"`
 	Estimate           *int32   `json:"estimate"`
@@ -1002,6 +1011,7 @@ func (h *Handler) CreateIssue(w http.ResponseWriter, r *http.Request) {
 		TeamID:             teamUUID,
 		CycleID:            cycleID,
 		Estimate:           estimate,
+		StartDate:          ptrToDate(req.StartDate),
 	})
 	if err != nil {
 		slog.Warn("create issue failed", append(logger.RequestAttrs(r), "error", err, "workspace_id", workspaceID)...)
@@ -1058,6 +1068,7 @@ type UpdateIssueRequest struct {
 	AssigneeID         *string  `json:"assignee_id"`
 	Position           *float64 `json:"position"`
 	DueDate            *string  `json:"due_date"`
+	StartDate          *string  `json:"start_date"`
 	ParentIssueID      *string  `json:"parent_issue_id"`
 	ProjectID          *string  `json:"project_id"`
 	CycleID            *string  `json:"cycle_id"`
@@ -1096,6 +1107,7 @@ func (h *Handler) UpdateIssue(w http.ResponseWriter, r *http.Request) {
 		AssigneeType:  prevIssue.AssigneeType,
 		AssigneeID:    prevIssue.AssigneeID,
 		DueDate:       prevIssue.DueDate,
+		StartDate:     prevIssue.StartDate,
 		ParentIssueID: prevIssue.ParentIssueID,
 		ProjectID:     prevIssue.ProjectID,
 		CycleID:       prevIssue.CycleID,
@@ -1148,6 +1160,9 @@ func (h *Handler) UpdateIssue(w http.ResponseWriter, r *http.Request) {
 		} else {
 			params.DueDate = pgtype.Timestamptz{Valid: false} // explicit null = clear date
 		}
+	}
+	if _, ok := rawFields["start_date"]; ok {
+		params.StartDate = ptrToDate(req.StartDate)
 	}
 	if _, ok := rawFields["parent_issue_id"]; ok {
 		if req.ParentIssueID != nil {
@@ -1284,6 +1299,12 @@ func (h *Handler) UpdateIssue(w http.ResponseWriter, r *http.Request) {
 	// is a user-initiated terminal action that should stop execution.
 	if statusChanged && issue.Status == "cancelled" {
 		h.TaskService.CancelTasksForIssue(r.Context(), issue.ID)
+	}
+
+	// Send Slack bug alert when an urgent bug is added to a cycle.
+	cycleAdded := issue.CycleID.Valid && !prevIssue.CycleID.Valid
+	if cycleAdded {
+		go h.sendBugAlertIfNeeded(context.WithoutCancel(r.Context()), issue)
 	}
 
 	writeJSON(w, http.StatusOK, resp)
@@ -1473,6 +1494,7 @@ func (h *Handler) BatchUpdateIssues(w http.ResponseWriter, r *http.Request) {
 			AssigneeType:  prevIssue.AssigneeType,
 			AssigneeID:    prevIssue.AssigneeID,
 			DueDate:       prevIssue.DueDate,
+			StartDate:     prevIssue.StartDate,
 			ParentIssueID: prevIssue.ParentIssueID,
 			ProjectID:     prevIssue.ProjectID,
 			CycleID:       prevIssue.CycleID,
@@ -1521,6 +1543,9 @@ func (h *Handler) BatchUpdateIssues(w http.ResponseWriter, r *http.Request) {
 			} else {
 				params.DueDate = pgtype.Timestamptz{Valid: false}
 			}
+		}
+		if _, ok := rawUpdates["start_date"]; ok {
+			params.StartDate = ptrToDate(req.Updates.StartDate)
 		}
 
 		if _, ok := rawUpdates["parent_issue_id"]; ok {

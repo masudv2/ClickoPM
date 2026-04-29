@@ -42,6 +42,7 @@ export interface Issue {
   estimate: number | null;
   position: number;
   due_date: string | null;
+  start_date: string | null;
   labels?: Label[];
   reactions?: IssueReaction[];
   created_at: string;

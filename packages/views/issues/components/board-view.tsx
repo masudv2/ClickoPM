@@ -105,6 +105,7 @@ export function BoardView({
   childProgressMap = EMPTY_PROGRESS_MAP,
   myIssuesScope,
   myIssuesFilter,
+  teamId,
 }: {
   issues: Issue[];
   visibleStatuses: IssueStatus[];
@@ -118,6 +119,7 @@ export function BoardView({
   /** When set, per-status load-more targets the scoped cache instead of the workspace one. */
   myIssuesScope?: string;
   myIssuesFilter?: MyIssuesFilter;
+  teamId?: string;
 }) {
   const sortBy = useViewStore((s) => s.sortBy);
   const sortDirection = useViewStore((s) => s.sortDirection);
@@ -288,6 +290,7 @@ export function BoardView({
             issueMap={issueMapRef.current}
             childProgressMap={childProgressMap}
             myIssuesOpts={myIssuesOpts}
+            teamId={teamId}
           />
         ))}
 
@@ -295,6 +298,7 @@ export function BoardView({
           <HiddenColumnsPanel
             hiddenStatuses={hiddenStatuses}
             myIssuesOpts={myIssuesOpts}
+            teamId={teamId}
           />
         )}
       </div>
@@ -316,16 +320,19 @@ function PaginatedBoardColumn({
   issueMap,
   childProgressMap,
   myIssuesOpts,
+  teamId,
 }: {
   status: IssueStatus;
   issueIds: string[];
   issueMap: Map<string, Issue>;
   childProgressMap?: Map<string, ChildProgress>;
   myIssuesOpts?: { scope: string; filter: MyIssuesFilter };
+  teamId?: string;
 }) {
   const { loadMore, hasMore, isLoading, total } = useLoadMoreByStatus(
     status,
     myIssuesOpts,
+    teamId,
   );
   return (
     <BoardColumn
@@ -334,6 +341,7 @@ function PaginatedBoardColumn({
       issueMap={issueMap}
       childProgressMap={childProgressMap}
       totalCount={total}
+      teamId={teamId}
       footer={
         hasMore ? (
           <InfiniteScrollSentinel onVisible={loadMore} loading={isLoading} />
@@ -346,9 +354,11 @@ function PaginatedBoardColumn({
 function HiddenColumnsPanel({
   hiddenStatuses,
   myIssuesOpts,
+  teamId,
 }: {
   hiddenStatuses: IssueStatus[];
   myIssuesOpts?: { scope: string; filter: MyIssuesFilter };
+  teamId?: string;
 }) {
   return (
     <div className="flex w-[240px] shrink-0 flex-col">
@@ -363,6 +373,7 @@ function HiddenColumnsPanel({
             key={status}
             status={status}
             myIssuesOpts={myIssuesOpts}
+            teamId={teamId}
           />
         ))}
       </div>
@@ -373,13 +384,15 @@ function HiddenColumnsPanel({
 function HiddenColumnRow({
   status,
   myIssuesOpts,
+  teamId,
 }: {
   status: IssueStatus;
   myIssuesOpts?: { scope: string; filter: MyIssuesFilter };
+  teamId?: string;
 }) {
   const cfg = STATUS_CONFIG[status];
   const viewStoreApi = useViewStoreApi();
-  const { total } = useLoadMoreByStatus(status, myIssuesOpts);
+  const { total } = useLoadMoreByStatus(status, myIssuesOpts, teamId);
   return (
     <div className="flex items-center justify-between rounded-lg px-2.5 py-2 hover:bg-muted/50">
       <div className="flex items-center gap-2">

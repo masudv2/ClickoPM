@@ -17,6 +17,7 @@ import { pinKeys } from "../pins/queries";
 import { autopilotKeys } from "../autopilots/queries";
 import { runtimeKeys } from "../runtimes/queries";
 import { cycleKeys } from "../cycles/queries";
+import { dashboardKeys } from "../dashboard/queries";
 import {
   onIssueCreated,
   onIssueUpdated,
@@ -202,6 +203,9 @@ export function useRealtimeSync(
         if (issue.status) {
           onInboxIssueStatusChanged(qc, wsId, issue.id, issue.status);
         }
+        // Cycle/dashboard stats depend on issue status/cycle_id
+        qc.invalidateQueries({ queryKey: cycleKeys.all(wsId) });
+        qc.invalidateQueries({ queryKey: dashboardKeys.all(wsId) });
       }
     });
 
@@ -209,7 +213,11 @@ export function useRealtimeSync(
       const { issue } = p as IssueCreatedPayload;
       if (!issue) return;
       const wsId = getCurrentWsId();
-      if (wsId) onIssueCreated(qc, wsId, issue);
+      if (wsId) {
+        onIssueCreated(qc, wsId, issue);
+        qc.invalidateQueries({ queryKey: cycleKeys.all(wsId) });
+        qc.invalidateQueries({ queryKey: dashboardKeys.all(wsId) });
+      }
     });
 
     const unsubIssueDeleted = ws.on("issue:deleted", (p) => {
@@ -219,6 +227,8 @@ export function useRealtimeSync(
       if (wsId) {
         onIssueDeleted(qc, wsId, issue_id);
         onInboxIssueDeleted(qc, wsId, issue_id);
+        qc.invalidateQueries({ queryKey: cycleKeys.all(wsId) });
+        qc.invalidateQueries({ queryKey: dashboardKeys.all(wsId) });
       }
     });
 

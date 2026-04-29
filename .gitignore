@@ -58,3 +58,8 @@ server/server
 data/
 .kilo
 .idea
+
+# temp files
+*.png
+.playwright-mcp/
+.superpowers/

@@ -110,6 +110,34 @@ func buildInvitationParams(from, to, inviterName, workspaceName, inviteURL strin
 	}
 }
 
+// SendTicketNotification sends a simple notification email for ticket replies.
+func (s *EmailService) SendTicketNotification(to, senderName, subject, body string) error {
+	if s.client == nil {
+		fmt.Printf("[DEV] Ticket notification to %s: %s — %s\n", to, subject, body)
+		return nil
+	}
+
+	safeSender := html.EscapeString(senderName)
+	safeBody := html.EscapeString(body)
+	subjectSender := sanitizeSubjectField(senderName)
+	safeSubject := sanitizeSubjectField(subject)
+
+	params := &resend.SendEmailRequest{
+		From:    fmt.Sprintf("%s via Multica <%s>", subjectSender, s.fromEmail),
+		To:      []string{to},
+		Subject: safeSubject,
+		Html: fmt.Sprintf(
+			`<div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+				<p><strong>%s</strong> wrote:</p>
+				<blockquote style="border-left: 3px solid #ddd; padding-left: 12px; color: #333; margin: 16px 0;">%s</blockquote>
+				<p style="color: #666; font-size: 14px;">Reply in Multica to continue the conversation.</p>
+			</div>`, safeSender, safeBody),
+	}
+
+	_, err := s.client.Emails.Send(params)
+	return err
+}
+
 // sanitizeSubjectField prepares user-controlled text for the email Subject line.
 // Subject is not HTML-rendered, so HTML-escaping would leak literal entities
 // (e.g. &lt;script&gt;) into the recipient's inbox. Instead strip control

@@ -5,17 +5,21 @@ interface ConfigState {
   cdnDomain: string;
   allowSignup: boolean;
   googleClientId: string;
+  slackConfigured: boolean;
   setCdnDomain: (domain: string) => void;
   setAuthConfig: (config: { allowSignup: boolean; googleClientId?: string }) => void;
+  setSlackConfigured: (configured: boolean) => void;
 }
 
 export const configStore = createStore<ConfigState>((set) => ({
   cdnDomain: "",
   allowSignup: true,
   googleClientId: "",
+  slackConfigured: false,
   setCdnDomain: (domain) => set({ cdnDomain: domain }),
   setAuthConfig: ({ allowSignup, googleClientId = "" }) =>
     set({ allowSignup, googleClientId }),
+  setSlackConfigured: (configured) => set({ slackConfigured: configured }),
 }));
 
 export function useConfigStore(): ConfigState;

@@ -14,6 +14,8 @@ export interface UploadResult {
 export interface UploadContext {
   issueId?: string;
   commentId?: string;
+  ticketId?: string;
+  ticketMessageId?: string;
 }
 
 export function useFileUpload(
@@ -33,6 +35,8 @@ export function useFileUpload(
         const att: Attachment = await api.uploadFile(file, {
           issueId: ctx?.issueId,
           commentId: ctx?.commentId,
+          ticketId: ctx?.ticketId,
+          ticketMessageId: ctx?.ticketMessageId,
         });
         return { id: att.id, filename: att.filename, link: att.url };
       } finally {

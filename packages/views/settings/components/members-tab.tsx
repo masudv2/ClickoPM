@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Crown, Shield, User, Plus, MoreHorizontal, UserMinus, Users, Clock, X, Mail } from "lucide-react";
+import { Crown, Shield, User, Plus, MoreHorizontal, UserMinus, Users, Clock, X, Mail, Briefcase } from "lucide-react";
 import { ActorAvatar } from "../../common/actor-avatar";
 import type { MemberWithUser, MemberRole, Invitation } from "@multica/core/types";
 import { Input } from "@multica/ui/components/ui/input";
@@ -47,6 +47,7 @@ const roleConfig: Record<MemberRole, { label: string; icon: typeof Crown; descri
   owner: { label: "Owner", icon: Crown, description: "Full access, manage all settings" },
   admin: { label: "Admin", icon: Shield, description: "Manage members and settings" },
   member: { label: "Member", icon: User, description: "Create and work on issues" },
+  client: { label: "Client", icon: Briefcase, description: "Submit and track support tickets" },
 };
 
 function MemberRow({

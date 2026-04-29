@@ -23,6 +23,8 @@ export interface BreakdownItem {
   completed_count: number;
   completed_points: number;
   percent: number;
+  velocity?: number;
+  capacity_percent?: number;
 }
 
 export interface LabelBreakdownItem {
@@ -62,6 +64,9 @@ export interface CycleWithProgress extends Cycle {
   started: ScopeStats;
   completed: ScopeStats;
   success: number;
+  velocity: number;
+  capacity_percent: number;
+  scope_creep: number;
   assignee_breakdown: BreakdownItem[];
   label_breakdown: LabelBreakdownItem[];
   priority_breakdown: BreakdownItem[];

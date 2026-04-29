@@ -13,9 +13,11 @@ export interface CreateIssueRequest {
   parent_issue_id?: string;
   project_id?: string;
   due_date?: string;
+  start_date?: string;
   attachment_ids?: string[];
   cycle_id?: string;
   estimate?: number;
+  team_id?: string;
 }
 
 export interface UpdateIssueRequest {
@@ -27,6 +29,7 @@ export interface UpdateIssueRequest {
   assignee_id?: string | null;
   position?: number;
   due_date?: string | null;
+  start_date?: string | null;
   parent_issue_id?: string | null;
   project_id?: string | null;
   cycle_id?: string | null;

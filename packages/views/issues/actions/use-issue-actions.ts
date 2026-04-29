@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type {
   Issue,
+  Cycle,
   MemberWithUser,
   Agent,
   UpdateIssueRequest,
@@ -19,6 +20,7 @@ import {
   agentListOptions,
 } from "@multica/core/workspace/queries";
 import { pinListOptions, useCreatePin, useDeletePin } from "@multica/core/pins";
+import { cycleListOptions } from "@multica/core/cycles/queries";
 import { canAssignAgent } from "../components/pickers";
 import { useNavigation } from "../../navigation";
 
@@ -28,6 +30,7 @@ export interface UseIssueActionsResult {
   // Derived data for rendering menu rows
   members: MemberWithUser[];
   agents: Agent[];
+  cycles: Cycle[];
   isPinned: boolean;
   // Handlers
   updateField: (updates: Partial<UpdateIssueRequest>) => void;
@@ -51,8 +54,17 @@ export function useIssueActions(issue: Issue | null): UseIssueActionsResult {
   const user = useAuthStore((s) => s.user);
   const userId = user?.id;
 
+  const issueTeamId = issue?.team_id ?? "";
   const { data: members = [] } = useQuery(memberListOptions(wsId));
   const { data: agents = [] } = useQuery(agentListOptions(wsId));
+  const { data: allCycles = [] } = useQuery({
+    ...cycleListOptions(wsId, issueTeamId),
+    enabled: !!issueTeamId,
+  });
+  const activeCycles = useMemo(
+    () => allCycles.filter((c) => ["active", "planned", "cooldown"].includes(c.status)),
+    [allCycles],
+  );
   const { data: pinnedItems = [] } = useQuery({
     ...pinListOptions(wsId, userId ?? ""),
     enabled: !!userId,
@@ -164,6 +176,7 @@ export function useIssueActions(issue: Issue | null): UseIssueActionsResult {
   return {
     members,
     agents: filteredAgents,
+    cycles: activeCycles,
     isPinned,
     updateField,
     togglePin,

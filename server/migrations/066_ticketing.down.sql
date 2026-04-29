@@ -1,0 +1,12 @@
+ALTER TABLE attachment DROP COLUMN IF EXISTS ticket_message_id;
+ALTER TABLE attachment DROP COLUMN IF EXISTS ticket_id;
+DROP TABLE IF EXISTS ticket_message;
+DROP TABLE IF EXISTS ticket;
+DROP TABLE IF EXISTS client_project;
+DROP TABLE IF EXISTS client;
+DROP TABLE IF EXISTS sla_policy;
+ALTER TABLE workspace DROP COLUMN IF EXISTS ticket_counter;
+ALTER TABLE workspace_invitation DROP CONSTRAINT IF EXISTS workspace_invitation_role_check;
+ALTER TABLE workspace_invitation ADD CONSTRAINT workspace_invitation_role_check CHECK (role IN ('admin', 'member'));
+ALTER TABLE member DROP CONSTRAINT IF EXISTS member_role_check;
+ALTER TABLE member ADD CONSTRAINT member_role_check CHECK (role IN ('owner', 'admin', 'member'));

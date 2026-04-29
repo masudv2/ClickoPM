@@ -18,8 +18,10 @@ function workspaceScoped(slug: string) {
   const ws = `/${encode(slug)}`;
   return {
     root: () => `${ws}/issues`,
+    dashboard: () => `${ws}/dashboard`,
     issues: () => `${ws}/issues`,
     issueDetail: (id: string) => `${ws}/issues/${encode(id)}`,
+    roadmap: () => `${ws}/roadmap`,
     projects: () => `${ws}/projects`,
     projectDetail: (id: string) => `${ws}/projects/${encode(id)}`,
     // Team-scoped paths
@@ -41,7 +43,16 @@ function workspaceScoped(slug: string) {
     runtimes: () => `${ws}/runtimes`,
     skills: () => `${ws}/skills`,
     skillDetail: (id: string) => `${ws}/skills/${encode(id)}`,
+    workload: () => `${ws}/workload`,
     settings: () => `${ws}/settings`,
+    // Ticketing (internal team)
+    tickets: () => `${ws}/tickets`,
+    ticketDetail: (id: string) => `${ws}/tickets/${encode(id)}`,
+    clients: () => `${ws}/clients`,
+    clientDetail: (id: string) => `${ws}/clients/${encode(id)}`,
+    // Portal (client-facing)
+    portal: () => `${ws}/portal/tickets`,
+    portalTicketDetail: (id: string) => `${ws}/portal/tickets/${encode(id)}`,
   };
 }
 

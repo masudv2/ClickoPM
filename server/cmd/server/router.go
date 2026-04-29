@@ -85,6 +85,7 @@ func NewRouter(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus, analytics
 		AllowedEmailDomains: splitAndTrim(os.Getenv("ALLOWED_EMAIL_DOMAINS")),
 	}
 	h := handler.New(queries, pool, hub, bus, emailSvc, store, cfSigner, analyticsClient, signupConfig)
+	h.Slack = service.NewSlackService(os.Getenv("SLACK_BOT_TOKEN"))
 	if rdb != nil {
 		h.LocalSkillListStore = handler.NewRedisLocalSkillListStore(rdb)
 		h.LocalSkillImportStore = handler.NewRedisLocalSkillImportStore(rdb)
@@ -290,6 +291,9 @@ func NewRouter(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus, analytics
 			// Task messages (user-facing, not daemon auth)
 			r.Get("/api/tasks/{taskId}/messages", h.ListTaskMessagesByUser)
 
+			// Roadmap
+			r.Get("/api/roadmap", h.ListRoadmapProjects)
+
 			// Projects
 			r.Route("/api/projects", func(r chi.Router) {
 				r.Get("/search", h.SearchProjects)
@@ -325,6 +329,13 @@ func NewRouter(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus, analytics
 					r.Delete("/members/{memberId}", h.RemoveTeamMember)
 				})
 			})
+
+			// Dashboard
+			r.Get("/api/dashboard", h.GetDashboard)
+
+			// Workload
+			r.Get("/api/workload", h.GetWorkload)
+			r.Get("/api/workload/issues", h.GetWorkloadIssues)
 
 			// Cycles
 			r.Route("/api/teams/{teamId}/cycles", func(r chi.Router) {
@@ -449,7 +460,76 @@ func NewRouter(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus, analytics
 			})
 			r.Get("/api/chat/pending-tasks", h.ListPendingChatTasks)
 
-			// Inbox
+			// Slack
+			r.Route("/api/slack", func(r chi.Router) {
+				r.Get("/channels", h.ListSlackChannels)
+				r.Post("/send-report", h.SendTestReport)
+			})
+
+			// --- Ticketing (internal team routes, clients blocked) ---
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireInternalMember(queries))
+
+				// SLA Policies
+				r.Route("/api/sla-policies", func(r chi.Router) {
+					r.Get("/", h.ListSLAPolicies)
+					r.Post("/", h.CreateSLAPolicy)
+					r.Route("/{id}", func(r chi.Router) {
+						r.Get("/", h.GetSLAPolicy)
+						r.Put("/", h.UpdateSLAPolicy)
+						r.Delete("/", h.DeleteSLAPolicy)
+					})
+				})
+
+				// Clients
+				r.Route("/api/clients", func(r chi.Router) {
+					r.Get("/", h.ListClients)
+					r.Post("/", h.CreateClientWithInvite)
+					r.Route("/{id}", func(r chi.Router) {
+						r.Get("/", h.GetClient)
+						r.Put("/", h.UpdateClient)
+						r.Delete("/", h.DeleteClientRecord)
+						r.Get("/projects", h.ListClientProjects)
+						r.Post("/projects/{projectId}", h.AddClientProject)
+						r.Delete("/projects/{projectId}", h.RemoveClientProject)
+					})
+				})
+
+				// Tickets (internal)
+				r.Route("/api/tickets", func(r chi.Router) {
+					r.Get("/", h.ListTickets)
+					r.Post("/", h.CreateTicket)
+					r.Get("/sla-monitor", h.GetSLAMonitor)
+					r.Route("/{id}", func(r chi.Router) {
+						r.Get("/", h.GetTicket)
+						r.Put("/", h.UpdateTicket)
+						r.Delete("/", h.DeleteTicket)
+						r.Get("/messages", h.ListTicketMessages)
+						r.Post("/replies", h.CreateTicketReply)
+						r.Post("/notes", h.CreateTicketNote)
+						r.Post("/link-issue", h.LinkIssueToTicket)
+						r.Post("/create-issue", h.CreateIssueFromTicket)
+					})
+				})
+			})
+
+			// --- Portal routes (client-facing, all members including clients) ---
+			r.Route("/api/portal", func(r chi.Router) {
+				r.Post("/invite", h.InviteTeammateFromPortal)
+				r.Get("/projects", h.ListPortalProjects)
+				r.Route("/tickets", func(r chi.Router) {
+					r.Get("/", h.ListTicketsForPortal)
+					r.Post("/", h.CreateTicketFromPortal)
+					r.Route("/{id}", func(r chi.Router) {
+						r.Get("/", h.GetTicketForPortal)
+						r.Post("/resolve", h.ResolveTicketFromPortal)
+						r.Post("/reopen", h.ReopenTicketFromPortal)
+						r.Get("/messages", h.ListTicketRepliesForPortal)
+						r.Post("/replies", h.CreateTicketReplyFromPortal)
+					})
+				})
+			})
+
 			r.Route("/api/inbox", func(r chi.Router) {
 				r.Get("/", h.ListInbox)
 				r.Get("/unread-count", h.CountUnreadInbox)
@@ -502,6 +582,7 @@ func parseUUID(s string) pgtype.UUID {
 	}
 	return u
 }
+
 
 func splitAndTrim(s string) []string {
 	if s == "" {

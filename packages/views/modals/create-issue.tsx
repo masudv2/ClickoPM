@@ -32,13 +32,16 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@multica/ui/components/
 import { Button } from "@multica/ui/components/ui/button";
 import { ContentEditor, type ContentEditorRef, TitleEditor, useFileDropZone, FileDropOverlay } from "../editor";
 import { StatusIcon, StatusPicker, PriorityPicker, AssigneePicker, DueDatePicker } from "../issues/components";
+import { StartDatePicker } from "../issues/components/pickers/start-date-picker";
 import { BacklogAgentHintContent } from "../issues/components/backlog-agent-hint-dialog";
 import { ProjectPicker } from "../projects/components/project-picker";
+import { CyclePicker } from "../cycles/components/cycle-picker";
 import { useCurrentWorkspace, useWorkspacePaths } from "@multica/core/paths";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { useIssueDraftStore } from "@multica/core/issues/stores/draft-store";
 import { issueDetailOptions } from "@multica/core/issues/queries";
 import { useCreateIssue, useUpdateIssue } from "@multica/core/issues/mutations";
+import { teamListOptions } from "@multica/core/teams";
 import { useFileUpload } from "@multica/core/hooks/use-file-upload";
 import { api } from "@multica/core/api";
 import { FileUploadButton } from "@multica/ui/components/common/file-upload-button";
@@ -69,6 +72,10 @@ export function CreateIssueModal({ onClose, data }: { onClose: () => void; data?
   const [assigneeType, setAssigneeType] = useState<IssueAssigneeType | undefined>(draft.assigneeType);
   const [assigneeId, setAssigneeId] = useState<string | undefined>(draft.assigneeId);
   const [dueDate, setDueDate] = useState<string | null>(draft.dueDate);
+  const [startDate, setStartDate] = useState<string | null>(null);
+  const [cycleId, setCycleId] = useState<string | undefined>(
+    (data?.cycle_id as string) || undefined,
+  );
   const [projectId, setProjectId] = useState<string | undefined>(
     (data?.project_id as string) || undefined,
   );
@@ -83,9 +90,17 @@ export function CreateIssueModal({ onClose, data }: { onClose: () => void; data?
   const [isExpanded, setIsExpanded] = useState(false);
   const [backlogHintIssueId, setBacklogHintIssueId] = useState<string | null>(null);
 
+  const wsId = useWorkspaceId();
+
+  // Resolve team: either directly from team_id (board/list +) or from team_identifier (sidebar/shortcut)
+  const teamIdentifier = data?.team_identifier as string | undefined;
+  const directTeamId = data?.team_id as string | undefined;
+  const { data: teams = [] } = useQuery({ ...teamListOptions(wsId), enabled: !!teamIdentifier });
+  const teamId = directTeamId
+    ?? (teamIdentifier ? teams.find((t) => t.identifier.toLowerCase() === teamIdentifier.toLowerCase())?.id : undefined);
+
   // Fetch parent issue details for the chip (status/identifier/title).
   // List cache usually has it already, so this resolves synchronously.
-  const wsId = useWorkspaceId();
   const { data: parentIssue } = useQuery({
     ...issueDetailOptions(wsId, parentIssueId ?? ""),
     enabled: !!parentIssueId,
@@ -126,9 +141,12 @@ export function CreateIssueModal({ onClose, data }: { onClose: () => void; data?
         assignee_type: assigneeType,
         assignee_id: assigneeId,
         due_date: dueDate || undefined,
+        start_date: startDate || undefined,
+        cycle_id: cycleId,
         attachment_ids: attachmentIds.length > 0 ? attachmentIds : undefined,
         parent_issue_id: parentIssueId,
         project_id: projectId,
+        team_id: teamId,
       });
 
       // Link queued children to the new parent. Deferred to after create
@@ -249,6 +267,12 @@ export function CreateIssueModal({ onClose, data }: { onClose: () => void; data?
             <div className="flex items-center justify-between px-5 pt-3 pb-2 shrink-0">
               <div className="flex items-center gap-1.5 text-xs">
                 <span className="text-muted-foreground">{workspaceName}</span>
+                {teamId && (
+                  <>
+                    <ChevronRight className="size-3 text-muted-foreground/50" />
+                    <span className="text-muted-foreground">{teams.find((t) => t.id === teamId)?.name}</span>
+                  </>
+                )}
                 <ChevronRight className="size-3 text-muted-foreground/50" />
                 <span className="font-medium">New issue</span>
               </div>
@@ -337,6 +361,14 @@ export function CreateIssueModal({ onClose, data }: { onClose: () => void; data?
                 align="start"
               />
 
+              {/* Start date */}
+              <StartDatePicker
+                startDate={startDate}
+                onUpdate={(u) => setStartDate(u.start_date ?? null)}
+                triggerRender={<PillButton />}
+                align="start"
+              />
+
               {/* Due date */}
               <DueDatePicker
                 dueDate={dueDate}
@@ -352,6 +384,17 @@ export function CreateIssueModal({ onClose, data }: { onClose: () => void; data?
                 triggerRender={<PillButton />}
                 align="start"
               />
+
+              {/* Cycle — only visible when a team is known */}
+              {teamId && (
+                <CyclePicker
+                  cycleId={cycleId ?? null}
+                  teamId={teamId}
+                  onUpdate={(u) => setCycleId(u.cycle_id ?? undefined)}
+                  triggerRender={<PillButton />}
+                  align="start"
+                />
+              )}
 
               {/* Parent chip — appears when parent is set.
                   Placed before the ⋯ so it wraps to a new line with ⋯ if

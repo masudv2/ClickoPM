@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -27,6 +28,8 @@ type ProjectResponse struct {
 	Priority    string  `json:"priority"`
 	LeadType    *string `json:"lead_type"`
 	LeadID      *string `json:"lead_id"`
+	StartDate   *string `json:"start_date"`
+	TargetDate  *string `json:"target_date"`
 	CreatedAt   string  `json:"created_at"`
 	UpdatedAt   string  `json:"updated_at"`
 	IssueCount  int64   `json:"issue_count"`
@@ -45,6 +48,8 @@ func projectToResponse(p db.Project) ProjectResponse {
 		Priority:    p.Priority,
 		LeadType:    textToPtr(p.LeadType),
 		LeadID:      uuidToPtr(p.LeadID),
+		StartDate:   dateToPtr(p.StartDate),
+		TargetDate:  dateToPtr(p.TargetDate),
 		CreatedAt:   timestampToString(p.CreatedAt),
 		UpdatedAt:   timestampToString(p.UpdatedAt),
 	}
@@ -67,6 +72,8 @@ type CreateProjectRequest struct {
 	LeadType    *string `json:"lead_type"`
 	LeadID      *string `json:"lead_id"`
 	TeamID      string  `json:"team_id"`
+	StartDate   *string `json:"start_date"`
+	TargetDate  *string `json:"target_date"`
 }
 
 type UpdateProjectRequest struct {
@@ -77,6 +84,8 @@ type UpdateProjectRequest struct {
 	Priority    *string `json:"priority"`
 	LeadType    *string `json:"lead_type"`
 	LeadID      *string `json:"lead_id"`
+	StartDate   *string `json:"start_date"`
+	TargetDate  *string `json:"target_date"`
 }
 
 func (h *Handler) ListProjects(w http.ResponseWriter, r *http.Request) {
@@ -199,6 +208,8 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 		LeadID:      leadID,
 		Priority:    priority,
 		TeamID:      teamUUID,
+		StartDate:   ptrToDate(req.StartDate),
+		TargetDate:  ptrToDate(req.TargetDate),
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to create project")
@@ -242,6 +253,8 @@ func (h *Handler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 		Icon:        prevProject.Icon,
 		LeadType:    prevProject.LeadType,
 		LeadID:      prevProject.LeadID,
+		StartDate:   prevProject.StartDate,
+		TargetDate:  prevProject.TargetDate,
 	}
 	if req.Title != nil {
 		params.Title = pgtype.Text{String: *req.Title, Valid: true}
@@ -279,6 +292,12 @@ func (h *Handler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 		} else {
 			params.LeadID = pgtype.UUID{Valid: false}
 		}
+	}
+	if _, ok := rawFields["start_date"]; ok {
+		params.StartDate = ptrToDate(req.StartDate)
+	}
+	if _, ok := rawFields["target_date"]; ok {
+		params.TargetDate = ptrToDate(req.TargetDate)
 	}
 	project, err := h.Queries.UpdateProject(r.Context(), params)
 	if err != nil {
@@ -576,4 +595,78 @@ func (h *Handler) SearchProjects(w http.ResponseWriter, r *http.Request) {
 		"projects": resp,
 		"total":    total,
 	})
+}
+
+type RoadmapProjectResponse struct {
+	ProjectResponse
+	HealthStatus string `json:"health_status"`
+}
+
+func computeHealthStatus(startDate, targetDate *string, doneCount, totalCount int64) string {
+	if startDate == nil || targetDate == nil || totalCount == 0 {
+		return "on_track"
+	}
+	now := time.Now()
+	start, err1 := time.Parse("2006-01-02", *startDate)
+	end, err2 := time.Parse("2006-01-02", *targetDate)
+	if err1 != nil || err2 != nil {
+		return "on_track"
+	}
+	totalDuration := end.Sub(start).Hours()
+	if totalDuration <= 0 {
+		return "on_track"
+	}
+	elapsed := now.Sub(start).Hours()
+	timePercent := elapsed / totalDuration
+	donePercent := float64(doneCount) / float64(totalCount)
+	gap := timePercent - donePercent
+	if gap > 0.25 {
+		return "behind"
+	}
+	if gap > 0.10 {
+		return "at_risk"
+	}
+	return "on_track"
+}
+
+func (h *Handler) ListRoadmapProjects(w http.ResponseWriter, r *http.Request) {
+	workspaceID := h.resolveWorkspaceID(r)
+	var teamFilter pgtype.UUID
+	if t := r.URL.Query().Get("team_id"); t != "" {
+		teamFilter = parseUUID(t)
+	}
+	projects, err := h.Queries.ListProjectsForRoadmap(r.Context(), db.ListProjectsForRoadmapParams{
+		WorkspaceID: parseUUID(workspaceID),
+		TeamID:      teamFilter,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list roadmap projects")
+		return
+	}
+	resp := make([]RoadmapProjectResponse, len(projects))
+	for i, p := range projects {
+		pr := ProjectResponse{
+			ID:          uuidToString(p.ID),
+			WorkspaceID: uuidToString(p.WorkspaceID),
+			TeamID:      uuidToString(p.TeamID),
+			Title:       p.Title,
+			Description: textToPtr(p.Description),
+			Icon:        textToPtr(p.Icon),
+			Status:      p.Status,
+			Priority:    p.Priority,
+			LeadType:    textToPtr(p.LeadType),
+			LeadID:      uuidToPtr(p.LeadID),
+			StartDate:   dateToPtr(p.StartDate),
+			TargetDate:  dateToPtr(p.TargetDate),
+			CreatedAt:   timestampToString(p.CreatedAt),
+			UpdatedAt:   timestampToString(p.UpdatedAt),
+			IssueCount:  p.TotalCount,
+			DoneCount:   p.DoneCount,
+		}
+		resp[i] = RoadmapProjectResponse{
+			ProjectResponse: pr,
+			HealthStatus:    computeHealthStatus(pr.StartDate, pr.TargetDate, p.DoneCount, p.TotalCount),
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"projects": resp})
 }

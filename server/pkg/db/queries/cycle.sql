@@ -83,15 +83,21 @@ FROM issue WHERE cycle_id = $1;
 
 -- name: GetCycleAssigneeBreakdown :many
 SELECT
-    assignee_type,
-    assignee_id,
+    i.assignee_type,
+    i.assignee_id,
+    COALESCE(
+        CASE WHEN i.assignee_type = 'member' THEN (SELECT u.name FROM member m JOIN "user" u ON u.id = m.user_id WHERE m.user_id = i.assignee_id)
+             WHEN i.assignee_type = 'agent' THEN (SELECT ar.name FROM agent_runtime ar WHERE ar.id = i.assignee_id)
+        END,
+        'Unknown'
+    ) AS assignee_name,
     COUNT(*) AS total_count,
-    COALESCE(SUM(estimate), 0)::integer AS total_points,
-    COUNT(*) FILTER (WHERE status IN ('done', 'cancelled')) AS completed_count,
-    COALESCE(SUM(estimate) FILTER (WHERE status IN ('done', 'cancelled')), 0)::integer AS completed_points
-FROM issue
-WHERE cycle_id = $1 AND assignee_id IS NOT NULL
-GROUP BY assignee_type, assignee_id;
+    COALESCE(SUM(i.estimate), 0)::integer AS total_points,
+    COUNT(*) FILTER (WHERE i.status IN ('done', 'cancelled')) AS completed_count,
+    COALESCE(SUM(i.estimate) FILTER (WHERE i.status IN ('done', 'cancelled')), 0)::integer AS completed_points
+FROM issue i
+WHERE i.cycle_id = $1 AND i.assignee_id IS NOT NULL
+GROUP BY i.assignee_type, i.assignee_id, assignee_name;
 
 -- name: GetCycleLabelBreakdown :many
 SELECT
@@ -132,6 +138,44 @@ FROM issue i
 JOIN project p ON p.id = i.project_id
 WHERE i.cycle_id = $1
 GROUP BY p.id, p.title, p.icon;
+
+-- name: ListCompletedCyclesForDashboard :many
+SELECT c.*, t.name as team_name, t.color as team_color, t.identifier as team_identifier
+FROM cycle c
+JOIN team t ON t.id = c.team_id
+WHERE c.workspace_id = $1
+  AND c.status IN ('completed', 'active')
+ORDER BY c.ends_at DESC
+LIMIT $2;
+
+-- name: GetLastCompletedCyclesForTeam :many
+SELECT * FROM cycle
+WHERE team_id = $1 AND status = 'completed'
+ORDER BY completed_at DESC
+LIMIT 3;
+
+-- name: GetAssigneePointsForCompletedCycles :many
+-- Returns total completed points per assignee across the last N completed cycles for a team.
+SELECT
+    i.assignee_type,
+    i.assignee_id,
+    COALESCE(SUM(i.estimate) FILTER (WHERE i.status IN ('done', 'cancelled')), 0)::integer AS completed_points
+FROM issue i
+JOIN cycle c ON c.id = i.cycle_id
+WHERE c.team_id = $1
+  AND c.status = 'completed'
+  AND c.completed_at IS NOT NULL
+  AND c.completed_at >= (
+      SELECT COALESCE(MIN(sub.completed_at), '1970-01-01'::timestamptz)
+      FROM (
+          SELECT completed_at FROM cycle
+          WHERE team_id = $1 AND status = 'completed'
+          ORDER BY completed_at DESC
+          LIMIT 3
+      ) sub
+  )
+  AND i.assignee_id IS NOT NULL
+GROUP BY i.assignee_type, i.assignee_id;
 
 -- name: ListIssuesByCycle :many
 SELECT i.* FROM issue i

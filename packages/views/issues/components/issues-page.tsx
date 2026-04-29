@@ -5,6 +5,9 @@ import { toast } from "sonner";
 import { ChevronRight, ListTodo } from "lucide-react";
 import type { IssueStatus } from "@multica/core/types";
 import { Skeleton } from "@multica/ui/components/ui/skeleton";
+import { Button } from "@multica/ui/components/ui/button";
+import { Plus } from "lucide-react";
+import { useModalStore } from "@multica/core/modals";
 import { useQuery } from "@tanstack/react-query";
 import { useIssueViewStore, useClearFiltersOnWorkspaceChange } from "@multica/core/issues/stores/view-store";
 import { useIssuesScopeStore } from "@multica/core/issues/stores/issues-scope-store";
@@ -157,6 +160,15 @@ export function IssuesPage({ teamIdentifier }: { teamIdentifier?: string } = {})
           </>
         )}
         <span className="text-sm font-medium">Issues</span>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="ml-auto h-7 gap-1 text-xs"
+          onClick={() => useModalStore.getState().open("create-issue", teamId ? { team_id: teamId } : undefined)}
+        >
+          <Plus className="size-3.5" />
+          New Issue
+        </Button>
       </PageHeader>
 
       <ViewStoreProvider store={useIssueViewStore}>
@@ -165,10 +177,18 @@ export function IssuesPage({ teamIdentifier }: { teamIdentifier?: string } = {})
 
         {/* Content: scrollable */}
         {scopedIssues.length === 0 ? (
-          <div className="flex flex-1 min-h-0 flex-col items-center justify-center gap-2 text-muted-foreground">
+          <div className="flex flex-1 min-h-0 flex-col items-center justify-center gap-3 text-muted-foreground">
             <ListTodo className="h-10 w-10 text-muted-foreground/40" />
             <p className="text-sm">No issues yet</p>
-            <p className="text-xs">Create an issue to get started.</p>
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              onClick={() => useModalStore.getState().open("create-issue", teamId ? { team_id: teamId } : undefined)}
+            >
+              <Plus className="size-3.5" />
+              Create Issue
+            </Button>
           </div>
         ) : (
           <div className="flex flex-col flex-1 min-h-0">
@@ -179,13 +199,14 @@ export function IssuesPage({ teamIdentifier }: { teamIdentifier?: string } = {})
                 hiddenStatuses={hiddenStatuses}
                 onMoveIssue={handleMoveIssue}
                 childProgressMap={childProgressMap}
+                teamId={teamId}
               />
             ) : (
-              <ListView issues={issues} visibleStatuses={visibleStatuses} childProgressMap={childProgressMap} />
+              <ListView issues={issues} visibleStatuses={visibleStatuses} childProgressMap={childProgressMap} teamId={teamId} onMoveIssue={handleMoveIssue} />
             )}
           </div>
         )}
-        {viewMode === "list" && <BatchActionToolbar />}
+        {viewMode === "list" && <BatchActionToolbar teamId={teamId} />}
       </ViewStoreProvider>
     </div>
   );

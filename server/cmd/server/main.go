@@ -252,6 +252,9 @@ func main() {
 	go runAutopilotScheduler(autopilotCtx, queries, autopilotSvc)
 	go runDBStatsLogger(sweepCtx, pool)
 	go runCycleSweeper(sweepCtx, queries, bus)
+	go runSLAChecker(sweepCtx, queries)
+	slackSvc := service.NewSlackService(os.Getenv("SLACK_BOT_TOKEN"))
+	go runReportScheduler(sweepCtx, queries, slackSvc)
 
 	// Graceful shutdown
 	go func() {

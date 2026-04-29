@@ -206,6 +206,12 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 			}
 			params.CommentID = comment.ID
 		}
+		if ticketID := r.FormValue("ticket_id"); ticketID != "" {
+			params.TicketID = parseUUID(ticketID)
+		}
+		if ticketMessageID := r.FormValue("ticket_message_id"); ticketMessageID != "" {
+			params.TicketMessageID = parseUUID(ticketMessageID)
+		}
 
 		link, err := h.Storage.Upload(r.Context(), key, data, contentType, header.Filename)
 		if err != nil {

@@ -20,6 +20,8 @@ type AppConfig struct {
 	// disable frontend event shipping too.
 	PosthogKey  string `json:"posthog_key"`
 	PosthogHost string `json:"posthog_host"`
+
+	SlackConfigured bool `json:"slack_configured"`
 }
 
 // GetConfig is mounted on the public (unauthenticated) route group because
@@ -43,6 +45,10 @@ func (h *Handler) GetConfig(w http.ResponseWriter, r *http.Request) {
 		if config.PosthogHost == "" && config.PosthogKey != "" {
 			config.PosthogHost = "https://us.i.posthog.com"
 		}
+	}
+
+	if os.Getenv("SLACK_BOT_TOKEN") != "" {
+		config.SlackConfigured = true
 	}
 
 	writeJSON(w, http.StatusOK, config)

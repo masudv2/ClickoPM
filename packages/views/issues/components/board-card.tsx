@@ -7,7 +7,7 @@ import type { AnimateLayoutChanges } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { toast } from "sonner";
 import type { Issue, UpdateIssueRequest } from "@multica/core/types";
-import { CalendarDays } from "lucide-react";
+import { CalendarDays, Timer } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { ActorAvatar } from "../../common/actor-avatar";
 import { useUpdateIssue } from "@multica/core/issues/mutations";
@@ -16,6 +16,7 @@ import { useWorkspaceId } from "@multica/core/hooks";
 import { projectListOptions } from "@multica/core/projects/queries";
 import { PriorityIcon } from "./priority-icon";
 import { PriorityPicker, AssigneePicker, DueDatePicker } from "./pickers";
+import { CyclePicker } from "../../cycles/components/cycle-picker";
 import { PRIORITY_CONFIG } from "@multica/core/issues/config";
 import { useViewStore } from "@multica/core/issues/stores/view-store-context";
 import { ProgressRing } from "./progress-ring";
@@ -76,6 +77,7 @@ export const BoardCardContent = memo(function BoardCardContent({
   const showDescription = storeProperties.description && issue.description;
   const showAssignee = storeProperties.assignee && issue.assignee_type && issue.assignee_id;
   const showDueDate = storeProperties.dueDate && issue.due_date;
+  const showCycle = storeProperties.cycle && issue.cycle_id;
   const showProject = storeProperties.project && project;
   const showChildProgress = storeProperties.childProgress && childProgress;
 
@@ -89,8 +91,8 @@ export const BoardCardContent = memo(function BoardCardContent({
         {issue.title}
       </p>
 
-      {/* Sub-issue progress + project */}
-      {(showChildProgress || showProject) && (
+      {/* Sub-issue progress + cycle + project */}
+      {(showChildProgress || showCycle || showProject) && (
         <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
           {showChildProgress && (
             <div className="inline-flex items-center gap-1 rounded-full bg-muted/60 px-1.5 py-0.5">
@@ -99,6 +101,22 @@ export const BoardCardContent = memo(function BoardCardContent({
                 {childProgress!.done}/{childProgress!.total}
               </span>
             </div>
+          )}
+          {showCycle && (
+            editable ? (
+              <PickerWrapper>
+                <CyclePicker
+                  cycleId={issue.cycle_id!}
+                  teamId={issue.team_id}
+                  onUpdate={handleUpdate}
+                />
+              </PickerWrapper>
+            ) : (
+              <span className="inline-flex items-center gap-1 rounded-full bg-muted/60 px-1.5 py-0.5 text-[11px] text-muted-foreground max-w-[140px]">
+                <Timer className="size-3 shrink-0" />
+                <span className="truncate">Cycle</span>
+              </span>
+            )
           )}
           {showProject && (
             <span className="inline-flex items-center gap-1 rounded-full bg-muted/60 px-1.5 py-0.5 text-[11px] text-muted-foreground max-w-[160px]">

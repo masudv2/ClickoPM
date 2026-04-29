@@ -1,8 +1,25 @@
 "use client";
 
-import { useMemo } from "react";
-import { ChevronRight, Plus } from "lucide-react";
+import { useState, useMemo, useCallback } from "react";
+import { ChevronRight, Plus, GripVertical } from "lucide-react";
 import { Accordion } from "@base-ui/react/accordion";
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+  type DragStartEvent,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@multica/ui/components/ui/tooltip";
 import { Button } from "@multica/ui/components/ui/button";
 import type { Issue, IssueStatus } from "@multica/core/types";
@@ -19,28 +36,36 @@ import { InfiniteScrollSentinel } from "./infinite-scroll-sentinel";
 
 const EMPTY_PROGRESS_MAP = new Map<string, ChildProgress>();
 
+function computePosition(issues: Issue[], activeIdx: number): number {
+  if (issues.length === 1) return issues[0]!.position;
+  if (activeIdx === 0) return issues[1]!.position - 1;
+  if (activeIdx === issues.length - 1) return issues[activeIdx - 1]!.position + 1;
+  return (issues[activeIdx - 1]!.position + issues[activeIdx + 1]!.position) / 2;
+}
+
 export function ListView({
   issues,
   visibleStatuses,
   childProgressMap = EMPTY_PROGRESS_MAP,
   myIssuesScope,
   myIssuesFilter,
+  teamId,
+  onMoveIssue,
 }: {
   issues: Issue[];
   visibleStatuses: IssueStatus[];
   childProgressMap?: Map<string, ChildProgress>;
-  /** When set, per-status load-more targets the scoped cache instead of the workspace one. */
   myIssuesScope?: string;
   myIssuesFilter?: MyIssuesFilter;
+  teamId?: string;
+  onMoveIssue?: (issueId: string, newStatus: IssueStatus, newPosition?: number) => void;
 }) {
   const sortBy = useViewStore((s) => s.sortBy);
   const sortDirection = useViewStore((s) => s.sortDirection);
-  const listCollapsedStatuses = useViewStore(
-    (s) => s.listCollapsedStatuses
-  );
-  const toggleListCollapsed = useViewStore(
-    (s) => s.toggleListCollapsed
-  );
+  const listCollapsedStatuses = useViewStore((s) => s.listCollapsedStatuses);
+  const toggleListCollapsed = useViewStore((s) => s.toggleListCollapsed);
+
+  const isDraggable = !!onMoveIssue && sortBy === "position";
 
   const issuesByStatus = useMemo(() => {
     const map = new Map<IssueStatus, Issue[]>();
@@ -52,18 +77,63 @@ export function ListView({
   }, [issues, visibleStatuses, sortBy, sortDirection]);
 
   const expandedStatuses = useMemo(
-    () =>
-      visibleStatuses.filter(
-        (s) => !listCollapsedStatuses.includes(s)
-      ),
-    [visibleStatuses, listCollapsedStatuses]
+    () => visibleStatuses.filter((s) => !listCollapsedStatuses.includes(s)),
+    [visibleStatuses, listCollapsedStatuses],
   );
 
   const myIssuesOpts = myIssuesScope
     ? { scope: myIssuesScope, filter: myIssuesFilter ?? {} }
     : undefined;
 
-  return (
+  // --- Drag state ---
+  const [activeIssue, setActiveIssue] = useState<Issue | null>(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+  );
+
+  const issueMap = useMemo(() => {
+    const map = new Map<string, Issue>();
+    for (const issue of issues) map.set(issue.id, issue);
+    return map;
+  }, [issues]);
+
+  const handleDragStart = useCallback(
+    (event: DragStartEvent) => {
+      setActiveIssue(issueMap.get(event.active.id as string) ?? null);
+    },
+    [issueMap],
+  );
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      setActiveIssue(null);
+      const { active, over } = event;
+      if (!over || !onMoveIssue) return;
+
+      const activeId = active.id as string;
+      const overId = over.id as string;
+      if (activeId === overId) return;
+
+      const issue = issueMap.get(activeId);
+      if (!issue) return;
+
+      const statusIssues = issuesByStatus.get(issue.status as IssueStatus);
+      if (!statusIssues) return;
+
+      const oldIndex = statusIssues.findIndex((i) => i.id === activeId);
+      const newIndex = statusIssues.findIndex((i) => i.id === overId);
+      if (oldIndex === -1 || newIndex === -1) return;
+
+      const reordered = arrayMove(statusIssues, oldIndex, newIndex);
+      const finalIdx = reordered.findIndex((i) => i.id === activeId);
+      const newPosition = computePosition(reordered, finalIdx);
+
+      onMoveIssue(activeId, issue.status as IssueStatus, newPosition);
+    },
+    [onMoveIssue, issueMap, issuesByStatus],
+  );
+
+  const content = (
     <div className="flex-1 min-h-0 overflow-y-auto p-2">
       <Accordion.Root
         multiple
@@ -86,9 +156,79 @@ export function ListView({
             issues={issuesByStatus.get(status) ?? []}
             childProgressMap={childProgressMap}
             myIssuesOpts={myIssuesOpts}
+            teamId={teamId}
+            isDraggable={isDraggable}
           />
         ))}
       </Accordion.Root>
+    </div>
+  );
+
+  if (!isDraggable) return content;
+
+  return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+    >
+      {content}
+      <DragOverlay dropAnimation={null}>
+        {activeIssue ? (
+          <div className="rounded-md border bg-card px-4 py-2 shadow-lg opacity-90">
+            <ListRowContent issue={activeIssue} />
+          </div>
+        ) : null}
+      </DragOverlay>
+    </DndContext>
+  );
+}
+
+function ListRowContent({ issue }: { issue: Issue }) {
+  return (
+    <div className="flex items-center gap-2 text-sm">
+      <span className="w-16 shrink-0 text-xs text-muted-foreground">{issue.identifier}</span>
+      <span className="truncate">{issue.title}</span>
+    </div>
+  );
+}
+
+function SortableListRow({
+  issue,
+  childProgress,
+}: {
+  issue: Issue;
+  childProgress?: ChildProgress;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: issue.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.3 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className="flex items-center group/sortable">
+      <button
+        type="button"
+        className="flex items-center justify-center w-5 shrink-0 cursor-grab text-muted-foreground/0 group-hover/sortable:text-muted-foreground/60 active:cursor-grabbing"
+        {...attributes}
+        {...listeners}
+      >
+        <GripVertical className="size-3.5" />
+      </button>
+      <div className="flex-1 min-w-0">
+        <ListRow issue={issue} childProgress={childProgress} />
+      </div>
     </div>
   );
 }
@@ -98,11 +238,15 @@ function StatusAccordionItem({
   issues,
   childProgressMap,
   myIssuesOpts,
+  teamId,
+  isDraggable,
 }: {
   status: IssueStatus;
   issues: Issue[];
   childProgressMap: Map<string, ChildProgress>;
   myIssuesOpts?: { scope: string; filter: MyIssuesFilter };
+  teamId?: string;
+  isDraggable?: boolean;
 }) {
   const cfg = STATUS_CONFIG[status];
   const selectedIds = useIssueSelectionStore((s) => s.selectedIds);
@@ -111,6 +255,7 @@ function StatusAccordionItem({
   const { loadMore, hasMore, isLoading, total } = useLoadMoreByStatus(
     status,
     myIssuesOpts,
+    teamId,
   );
 
   const issueIds = issues.map((i) => i.id);
@@ -157,7 +302,7 @@ function StatusAccordionItem({
                   onClick={() =>
                     useModalStore
                       .getState()
-                      .open("create-issue", { status })
+                      .open("create-issue", { status, ...(teamId ? { team_id: teamId } : {}) })
                   }
                 />
               }
@@ -171,9 +316,21 @@ function StatusAccordionItem({
       <Accordion.Panel className="pt-1">
         {issues.length > 0 ? (
           <>
-            {issues.map((issue) => (
-              <ListRow key={issue.id} issue={issue} childProgress={childProgressMap.get(issue.id)} />
-            ))}
+            {isDraggable ? (
+              <SortableContext items={issueIds} strategy={verticalListSortingStrategy}>
+                {issues.map((issue) => (
+                  <SortableListRow
+                    key={issue.id}
+                    issue={issue}
+                    childProgress={childProgressMap.get(issue.id)}
+                  />
+                ))}
+              </SortableContext>
+            ) : (
+              issues.map((issue) => (
+                <ListRow key={issue.id} issue={issue} childProgress={childProgressMap.get(issue.id)} />
+              ))
+            )}
             {hasMore && (
               <InfiniteScrollSentinel onVisible={loadMore} loading={isLoading} />
             )}

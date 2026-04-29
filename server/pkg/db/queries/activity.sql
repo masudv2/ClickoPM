@@ -24,3 +24,10 @@ WHERE workspace_id = $1
   AND details->>'to_type' IS NOT NULL
   AND details->>'to_id' IS NOT NULL
 GROUP BY details->>'to_type', details->>'to_id';
+
+-- name: ListWorkspaceActivities :many
+SELECT * FROM activity_log
+WHERE workspace_id = $1
+  AND action = ANY($2::text[])
+ORDER BY created_at DESC
+LIMIT $3 OFFSET $4;

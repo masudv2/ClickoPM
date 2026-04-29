@@ -26,10 +26,10 @@ func (q *Queries) CountIssuesByProject(ctx context.Context, projectID pgtype.UUI
 const createProject = `-- name: CreateProject :one
 INSERT INTO project (
     workspace_id, title, description, icon, status,
-    lead_type, lead_id, priority, team_id
+    lead_type, lead_id, priority, team_id, start_date, target_date
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9
-) RETURNING id, workspace_id, title, description, icon, status, lead_type, lead_id, created_at, updated_at, priority, team_id
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+) RETURNING id, workspace_id, title, description, icon, status, lead_type, lead_id, created_at, updated_at, priority, team_id, start_date, target_date
 `
 
 type CreateProjectParams struct {
@@ -42,6 +42,8 @@ type CreateProjectParams struct {
 	LeadID      pgtype.UUID `json:"lead_id"`
 	Priority    string      `json:"priority"`
 	TeamID      pgtype.UUID `json:"team_id"`
+	StartDate   pgtype.Date `json:"start_date"`
+	TargetDate  pgtype.Date `json:"target_date"`
 }
 
 func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (Project, error) {
@@ -55,6 +57,8 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		arg.LeadID,
 		arg.Priority,
 		arg.TeamID,
+		arg.StartDate,
+		arg.TargetDate,
 	)
 	var i Project
 	err := row.Scan(
@@ -70,6 +74,8 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		&i.UpdatedAt,
 		&i.Priority,
 		&i.TeamID,
+		&i.StartDate,
+		&i.TargetDate,
 	)
 	return i, err
 }
@@ -84,7 +90,7 @@ func (q *Queries) DeleteProject(ctx context.Context, id pgtype.UUID) error {
 }
 
 const getProject = `-- name: GetProject :one
-SELECT id, workspace_id, title, description, icon, status, lead_type, lead_id, created_at, updated_at, priority, team_id FROM project
+SELECT id, workspace_id, title, description, icon, status, lead_type, lead_id, created_at, updated_at, priority, team_id, start_date, target_date FROM project
 WHERE id = $1
 `
 
@@ -104,12 +110,14 @@ func (q *Queries) GetProject(ctx context.Context, id pgtype.UUID) (Project, erro
 		&i.UpdatedAt,
 		&i.Priority,
 		&i.TeamID,
+		&i.StartDate,
+		&i.TargetDate,
 	)
 	return i, err
 }
 
 const getProjectInWorkspace = `-- name: GetProjectInWorkspace :one
-SELECT id, workspace_id, title, description, icon, status, lead_type, lead_id, created_at, updated_at, priority, team_id FROM project
+SELECT id, workspace_id, title, description, icon, status, lead_type, lead_id, created_at, updated_at, priority, team_id, start_date, target_date FROM project
 WHERE id = $1 AND workspace_id = $2
 `
 
@@ -134,6 +142,8 @@ func (q *Queries) GetProjectInWorkspace(ctx context.Context, arg GetProjectInWor
 		&i.UpdatedAt,
 		&i.Priority,
 		&i.TeamID,
+		&i.StartDate,
+		&i.TargetDate,
 	)
 	return i, err
 }
@@ -174,7 +184,7 @@ func (q *Queries) GetProjectIssueStats(ctx context.Context, projectIds []pgtype.
 }
 
 const listProjects = `-- name: ListProjects :many
-SELECT id, workspace_id, title, description, icon, status, lead_type, lead_id, created_at, updated_at, priority, team_id FROM project
+SELECT id, workspace_id, title, description, icon, status, lead_type, lead_id, created_at, updated_at, priority, team_id, start_date, target_date FROM project
 WHERE workspace_id = $1
   AND ($2::text IS NULL OR status = $2)
   AND ($3::text IS NULL OR priority = $3)
@@ -216,6 +226,85 @@ func (q *Queries) ListProjects(ctx context.Context, arg ListProjectsParams) ([]P
 			&i.UpdatedAt,
 			&i.Priority,
 			&i.TeamID,
+			&i.StartDate,
+			&i.TargetDate,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProjectsForRoadmap = `-- name: ListProjectsForRoadmap :many
+SELECT p.id, p.workspace_id, p.title, p.description, p.icon, p.status, p.lead_type, p.lead_id, p.created_at, p.updated_at, p.priority, p.team_id, p.start_date, p.target_date,
+       COALESCE(s.total_count, 0)::bigint AS total_count,
+       COALESCE(s.done_count, 0)::bigint AS done_count
+FROM project p
+LEFT JOIN LATERAL (
+    SELECT count(*)::bigint AS total_count,
+           count(*) FILTER (WHERE i.status IN ('done', 'cancelled'))::bigint AS done_count
+    FROM issue i WHERE i.project_id = p.id
+) s ON true
+WHERE p.workspace_id = $1
+  AND p.status NOT IN ('completed', 'cancelled')
+  AND ($2::uuid IS NULL OR p.team_id = $2)
+ORDER BY p.team_id, p.start_date NULLS LAST, p.created_at
+`
+
+type ListProjectsForRoadmapParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	TeamID      pgtype.UUID `json:"team_id"`
+}
+
+type ListProjectsForRoadmapRow struct {
+	ID          pgtype.UUID        `json:"id"`
+	WorkspaceID pgtype.UUID        `json:"workspace_id"`
+	Title       string             `json:"title"`
+	Description pgtype.Text        `json:"description"`
+	Icon        pgtype.Text        `json:"icon"`
+	Status      string             `json:"status"`
+	LeadType    pgtype.Text        `json:"lead_type"`
+	LeadID      pgtype.UUID        `json:"lead_id"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	Priority    string             `json:"priority"`
+	TeamID      pgtype.UUID        `json:"team_id"`
+	StartDate   pgtype.Date        `json:"start_date"`
+	TargetDate  pgtype.Date        `json:"target_date"`
+	TotalCount  int64              `json:"total_count"`
+	DoneCount   int64              `json:"done_count"`
+}
+
+func (q *Queries) ListProjectsForRoadmap(ctx context.Context, arg ListProjectsForRoadmapParams) ([]ListProjectsForRoadmapRow, error) {
+	rows, err := q.db.Query(ctx, listProjectsForRoadmap, arg.WorkspaceID, arg.TeamID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListProjectsForRoadmapRow{}
+	for rows.Next() {
+		var i ListProjectsForRoadmapRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.Title,
+			&i.Description,
+			&i.Icon,
+			&i.Status,
+			&i.LeadType,
+			&i.LeadID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Priority,
+			&i.TeamID,
+			&i.StartDate,
+			&i.TargetDate,
+			&i.TotalCount,
+			&i.DoneCount,
 		); err != nil {
 			return nil, err
 		}
@@ -236,9 +325,11 @@ UPDATE project SET
     priority = COALESCE($6, priority),
     lead_type = $7,
     lead_id = $8,
+    start_date = $9,
+    target_date = $10,
     updated_at = now()
 WHERE id = $1
-RETURNING id, workspace_id, title, description, icon, status, lead_type, lead_id, created_at, updated_at, priority, team_id
+RETURNING id, workspace_id, title, description, icon, status, lead_type, lead_id, created_at, updated_at, priority, team_id, start_date, target_date
 `
 
 type UpdateProjectParams struct {
@@ -250,6 +341,8 @@ type UpdateProjectParams struct {
 	Priority    pgtype.Text `json:"priority"`
 	LeadType    pgtype.Text `json:"lead_type"`
 	LeadID      pgtype.UUID `json:"lead_id"`
+	StartDate   pgtype.Date `json:"start_date"`
+	TargetDate  pgtype.Date `json:"target_date"`
 }
 
 func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (Project, error) {
@@ -262,6 +355,8 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (P
 		arg.Priority,
 		arg.LeadType,
 		arg.LeadID,
+		arg.StartDate,
+		arg.TargetDate,
 	)
 	var i Project
 	err := row.Scan(
@@ -277,6 +372,8 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (P
 		&i.UpdatedAt,
 		&i.Priority,
 		&i.TeamID,
+		&i.StartDate,
+		&i.TargetDate,
 	)
 	return i, err
 }

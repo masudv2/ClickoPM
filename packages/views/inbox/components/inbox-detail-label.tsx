@@ -20,6 +20,10 @@ const typeLabels: Record<InboxItemType, string> = {
   agent_blocked: "Agent blocked",
   agent_completed: "Agent completed",
   reaction_added: "Reacted",
+  ticket_new: "New ticket",
+  ticket_assigned: "Ticket assigned",
+  ticket_reply: "Ticket reply",
+  sla_breach: "SLA breached",
 };
 
 export { typeLabels };

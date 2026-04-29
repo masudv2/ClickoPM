@@ -64,6 +64,7 @@ type Handler struct {
 	Storage               storage.Storage
 	CFSigner              *auth.CloudFrontSigner
 	Analytics             analytics.Client
+	Slack                 *service.SlackService
 	cfg                   Config
 }
 
@@ -117,6 +118,8 @@ func strToText(s string) pgtype.Text                { return util.StrToText(s) }
 func timestampToString(t pgtype.Timestamptz) string { return util.TimestampToString(t) }
 func timestampToPtr(t pgtype.Timestamptz) *string   { return util.TimestampToPtr(t) }
 func uuidToPtr(u pgtype.UUID) *string               { return util.UUIDToPtr(u) }
+func dateToPtr(d pgtype.Date) *string               { return util.DateToPtr(d) }
+func ptrToDate(s *string) pgtype.Date               { return util.PtrToDate(s) }
 
 // publish sends a domain event through the event bus.
 func (h *Handler) publish(eventType, workspaceID, actorType, actorID string, payload any) {

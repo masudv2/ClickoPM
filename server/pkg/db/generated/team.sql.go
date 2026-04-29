@@ -317,6 +317,43 @@ func (q *Queries) ListTeams(ctx context.Context, workspaceID pgtype.UUID) ([]Tea
 	return items, nil
 }
 
+const listTeamsWithReportsEnabled = `-- name: ListTeamsWithReportsEnabled :many
+SELECT id, workspace_id, name, identifier, icon, color, timezone, settings, issue_counter, position, created_at, updated_at FROM team WHERE settings->'reports'->>'enabled' = 'true'
+`
+
+func (q *Queries) ListTeamsWithReportsEnabled(ctx context.Context) ([]Team, error) {
+	rows, err := q.db.Query(ctx, listTeamsWithReportsEnabled)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Team{}
+	for rows.Next() {
+		var i Team
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.Name,
+			&i.Identifier,
+			&i.Icon,
+			&i.Color,
+			&i.Timezone,
+			&i.Settings,
+			&i.IssueCounter,
+			&i.Position,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const removeTeamMember = `-- name: RemoveTeamMember :exec
 DELETE FROM team_member WHERE team_id = $1 AND member_id = $2
 `

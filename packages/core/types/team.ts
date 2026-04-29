@@ -32,6 +32,17 @@ export interface TeamSettings {
     channel_id: string | null;
     notifications: Record<string, boolean>;
   };
+  reports?: {
+    enabled: boolean;
+    slack_channel_id: string | null;
+    slack_channel_name: string | null;
+    morning_time: string;
+    evening_time: string;
+    weekly_day: string;
+    weekly_time: string;
+    sprint_day: string;
+    sprint_time: string;
+  };
 }
 
 export interface TeamMember {

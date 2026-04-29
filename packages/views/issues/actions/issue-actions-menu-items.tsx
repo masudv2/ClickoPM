@@ -9,8 +9,10 @@ import {
   Pin,
   PinOff,
   Plus,
+  Timer,
   Trash2,
   UserMinus,
+  X,
 } from "lucide-react";
 import type { Issue } from "@multica/core/types";
 import {
@@ -85,6 +87,7 @@ export function IssueActionsMenuItems({
   const {
     members,
     agents,
+    cycles,
     isPinned,
     updateField,
     togglePin,
@@ -217,6 +220,40 @@ export function IssueActionsMenuItems({
               <P.Separator />
               <P.Item onClick={() => updateField({ due_date: null })}>
                 Clear date
+              </P.Item>
+            </>
+          )}
+        </P.SubContent>
+      </P.Sub>
+
+      {/* Cycle */}
+      <P.Sub>
+        <P.SubTrigger>
+          <Timer className="h-3.5 w-3.5" />
+          Cycle
+        </P.SubTrigger>
+        <P.SubContent>
+          {cycles.length === 0 ? (
+            <P.Item disabled>
+              <span className="text-xs text-muted-foreground">No active cycles</span>
+            </P.Item>
+          ) : (
+            cycles.map((c) => (
+              <P.Item key={c.id} onClick={() => updateField({ cycle_id: c.id })}>
+                <Timer className="h-3.5 w-3.5 text-muted-foreground" />
+                {c.name}
+                {issue.cycle_id === c.id && (
+                  <span className="ml-auto text-xs text-muted-foreground">✓</span>
+                )}
+              </P.Item>
+            ))
+          )}
+          {issue.cycle_id && (
+            <>
+              <P.Separator />
+              <P.Item onClick={() => updateField({ cycle_id: null })}>
+                <X className="h-3.5 w-3.5 text-muted-foreground" />
+                Remove from cycle
               </P.Item>
             </>
           )}

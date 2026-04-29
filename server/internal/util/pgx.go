@@ -67,6 +67,29 @@ func TimestampToPtr(t pgtype.Timestamptz) *string {
 	return &s
 }
 
+func DateToPtr(d pgtype.Date) *string {
+	if !d.Valid {
+		return nil
+	}
+	s := d.Time.Format("2006-01-02")
+	return &s
+}
+
+func PtrToDate(s *string) pgtype.Date {
+	if s == nil || *s == "" {
+		return pgtype.Date{}
+	}
+	// Try YYYY-MM-DD first, then RFC3339 (frontend may send either)
+	t, err := time.Parse("2006-01-02", *s)
+	if err != nil {
+		t, err = time.Parse(time.RFC3339, *s)
+		if err != nil {
+			return pgtype.Date{}
+		}
+	}
+	return pgtype.Date{Time: t, Valid: true}
+}
+
 func UUIDToPtr(u pgtype.UUID) *string {
 	if !u.Valid {
 		return nil

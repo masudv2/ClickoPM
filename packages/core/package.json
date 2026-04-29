@@ -58,6 +58,9 @@
     "./cycles": "./cycles/index.ts",
     "./cycles/queries": "./cycles/queries.ts",
     "./cycles/mutations": "./cycles/mutations.ts",
+    "./workload": "./workload/index.ts",
+    "./dashboard": "./dashboard/index.ts",
+    "./dashboard/queries": "./dashboard/queries.ts",
     "./pins": "./pins/index.ts",
     "./pins/queries": "./pins/queries.ts",
     "./pins/mutations": "./pins/mutations.ts",
@@ -76,7 +79,10 @@
     "./utils": "./utils.ts",
     "./constants/*": "./constants/*.ts",
     "./platform": "./platform/index.ts",
-    "./analytics": "./analytics/index.ts"
+    "./analytics": "./analytics/index.ts",
+    "./tickets": "./tickets/index.ts",
+    "./tickets/queries": "./tickets/queries.ts",
+    "./tickets/mutations": "./tickets/mutations.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "catalog:",

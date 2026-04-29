@@ -6,6 +6,7 @@ export const projectKeys = {
   list: (wsId: string) => [...projectKeys.all(wsId), "list"] as const,
   detail: (wsId: string, id: string) =>
     [...projectKeys.all(wsId), "detail", id] as const,
+  roadmap: (wsId: string) => [...projectKeys.all(wsId), "roadmap"] as const,
 };
 
 export function projectListOptions(wsId: string, teamId?: string) {
@@ -20,5 +21,13 @@ export function projectDetailOptions(wsId: string, id: string) {
   return queryOptions({
     queryKey: projectKeys.detail(wsId, id),
     queryFn: () => api.getProject(id),
+  });
+}
+
+export function roadmapProjectsOptions(wsId: string, teamId?: string) {
+  return queryOptions({
+    queryKey: teamId ? [...projectKeys.roadmap(wsId), "team", teamId] : projectKeys.roadmap(wsId),
+    queryFn: () => api.listRoadmapProjects(teamId ? { team_id: teamId } : undefined),
+    select: (data) => data.projects,
   });
 }

@@ -32,6 +32,7 @@ export function AssigneePicker({
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
   align,
+  capacityMap,
 }: {
   assigneeType: IssueAssigneeType | null;
   assigneeId: string | null;
@@ -41,6 +42,7 @@ export function AssigneePicker({
   open?: boolean;
   onOpenChange?: (v: boolean) => void;
   align?: "start" | "center" | "end";
+  capacityMap?: Map<string, number>;
 }) {
   const [internalOpen, setInternalOpen] = useState(false);
   const open = controlledOpen ?? internalOpen;
@@ -124,22 +126,30 @@ export function AssigneePicker({
       {/* Members */}
       {filteredMembers.length > 0 && (
         <PickerSection label="Members">
-          {filteredMembers.map((m) => (
-            <PickerItem
-              key={m.user_id}
-              selected={isSelected("member", m.user_id)}
-              onClick={() => {
-                onUpdate({
-                  assignee_type: "member",
-                  assignee_id: m.user_id,
-                });
-                setOpen(false);
-              }}
-            >
-              <ActorAvatar actorType="member" actorId={m.user_id} size={18} />
-              <span>{m.name}</span>
-            </PickerItem>
-          ))}
+          {filteredMembers.map((m) => {
+            const capPct = capacityMap?.get(m.user_id);
+            return (
+              <PickerItem
+                key={m.user_id}
+                selected={isSelected("member", m.user_id)}
+                onClick={() => {
+                  onUpdate({
+                    assignee_type: "member",
+                    assignee_id: m.user_id,
+                  });
+                  setOpen(false);
+                }}
+              >
+                <ActorAvatar actorType="member" actorId={m.user_id} size={18} />
+                <span className="flex-1 truncate">{m.name}</span>
+                {capPct != null && (
+                  <span className={`text-[10px] font-medium tabular-nums ${capPct > 100 ? "text-red-400" : capPct >= 80 ? "text-amber-400" : "text-emerald-400"}`}>
+                    {capPct}%
+                  </span>
+                )}
+              </PickerItem>
+            );
+          })}
         </PickerSection>
       )}
 

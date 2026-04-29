@@ -145,6 +145,56 @@ func (q *Queries) GetActiveCycleForTeam(ctx context.Context, teamID pgtype.UUID)
 	return i, err
 }
 
+const getAssigneePointsForCompletedCycles = `-- name: GetAssigneePointsForCompletedCycles :many
+SELECT
+    i.assignee_type,
+    i.assignee_id,
+    COALESCE(SUM(i.estimate) FILTER (WHERE i.status IN ('done', 'cancelled')), 0)::integer AS completed_points
+FROM issue i
+JOIN cycle c ON c.id = i.cycle_id
+WHERE c.team_id = $1
+  AND c.status = 'completed'
+  AND c.completed_at IS NOT NULL
+  AND c.completed_at >= (
+      SELECT COALESCE(MIN(sub.completed_at), '1970-01-01'::timestamptz)
+      FROM (
+          SELECT completed_at FROM cycle
+          WHERE team_id = $1 AND status = 'completed'
+          ORDER BY completed_at DESC
+          LIMIT 3
+      ) sub
+  )
+  AND i.assignee_id IS NOT NULL
+GROUP BY i.assignee_type, i.assignee_id
+`
+
+type GetAssigneePointsForCompletedCyclesRow struct {
+	AssigneeType    pgtype.Text `json:"assignee_type"`
+	AssigneeID      pgtype.UUID `json:"assignee_id"`
+	CompletedPoints int32       `json:"completed_points"`
+}
+
+// Returns total completed points per assignee across the last N completed cycles for a team.
+func (q *Queries) GetAssigneePointsForCompletedCycles(ctx context.Context, teamID pgtype.UUID) ([]GetAssigneePointsForCompletedCyclesRow, error) {
+	rows, err := q.db.Query(ctx, getAssigneePointsForCompletedCycles, teamID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetAssigneePointsForCompletedCyclesRow{}
+	for rows.Next() {
+		var i GetAssigneePointsForCompletedCyclesRow
+		if err := rows.Scan(&i.AssigneeType, &i.AssigneeID, &i.CompletedPoints); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getCycle = `-- name: GetCycle :one
 SELECT id, workspace_id, team_id, name, description, number, status, starts_at, ends_at, cooldown_ends_at, completed_at, scope_history, completed_scope_history, started_scope_history, position, created_at, updated_at FROM cycle WHERE id = $1
 `
@@ -176,20 +226,27 @@ func (q *Queries) GetCycle(ctx context.Context, id pgtype.UUID) (Cycle, error) {
 
 const getCycleAssigneeBreakdown = `-- name: GetCycleAssigneeBreakdown :many
 SELECT
-    assignee_type,
-    assignee_id,
+    i.assignee_type,
+    i.assignee_id,
+    COALESCE(
+        CASE WHEN i.assignee_type = 'member' THEN (SELECT u.name FROM member m JOIN "user" u ON u.id = m.user_id WHERE m.user_id = i.assignee_id)
+             WHEN i.assignee_type = 'agent' THEN (SELECT ar.name FROM agent_runtime ar WHERE ar.id = i.assignee_id)
+        END,
+        'Unknown'
+    ) AS assignee_name,
     COUNT(*) AS total_count,
-    COALESCE(SUM(estimate), 0)::integer AS total_points,
-    COUNT(*) FILTER (WHERE status IN ('done', 'cancelled')) AS completed_count,
-    COALESCE(SUM(estimate) FILTER (WHERE status IN ('done', 'cancelled')), 0)::integer AS completed_points
-FROM issue
-WHERE cycle_id = $1 AND assignee_id IS NOT NULL
-GROUP BY assignee_type, assignee_id
+    COALESCE(SUM(i.estimate), 0)::integer AS total_points,
+    COUNT(*) FILTER (WHERE i.status IN ('done', 'cancelled')) AS completed_count,
+    COALESCE(SUM(i.estimate) FILTER (WHERE i.status IN ('done', 'cancelled')), 0)::integer AS completed_points
+FROM issue i
+WHERE i.cycle_id = $1 AND i.assignee_id IS NOT NULL
+GROUP BY i.assignee_type, i.assignee_id, assignee_name
 `
 
 type GetCycleAssigneeBreakdownRow struct {
 	AssigneeType    pgtype.Text `json:"assignee_type"`
 	AssigneeID      pgtype.UUID `json:"assignee_id"`
+	AssigneeName    interface{} `json:"assignee_name"`
 	TotalCount      int64       `json:"total_count"`
 	TotalPoints     int32       `json:"total_points"`
 	CompletedCount  int64       `json:"completed_count"`
@@ -208,6 +265,7 @@ func (q *Queries) GetCycleAssigneeBreakdown(ctx context.Context, cycleID pgtype.
 		if err := rows.Scan(
 			&i.AssigneeType,
 			&i.AssigneeID,
+			&i.AssigneeName,
 			&i.TotalCount,
 			&i.TotalPoints,
 			&i.CompletedCount,
@@ -444,6 +502,51 @@ func (q *Queries) GetCycleScopeSnapshot(ctx context.Context, cycleID pgtype.UUID
 	return i, err
 }
 
+const getLastCompletedCyclesForTeam = `-- name: GetLastCompletedCyclesForTeam :many
+SELECT id, workspace_id, team_id, name, description, number, status, starts_at, ends_at, cooldown_ends_at, completed_at, scope_history, completed_scope_history, started_scope_history, position, created_at, updated_at FROM cycle
+WHERE team_id = $1 AND status = 'completed'
+ORDER BY completed_at DESC
+LIMIT 3
+`
+
+func (q *Queries) GetLastCompletedCyclesForTeam(ctx context.Context, teamID pgtype.UUID) ([]Cycle, error) {
+	rows, err := q.db.Query(ctx, getLastCompletedCyclesForTeam, teamID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Cycle{}
+	for rows.Next() {
+		var i Cycle
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.TeamID,
+			&i.Name,
+			&i.Description,
+			&i.Number,
+			&i.Status,
+			&i.StartsAt,
+			&i.EndsAt,
+			&i.CooldownEndsAt,
+			&i.CompletedAt,
+			&i.ScopeHistory,
+			&i.CompletedScopeHistory,
+			&i.StartedScopeHistory,
+			&i.Position,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getLastCycleEndDate = `-- name: GetLastCycleEndDate :one
 SELECT COALESCE(MAX(COALESCE(cooldown_ends_at, ends_at)), now()) AS last_end
 FROM cycle WHERE team_id = $1
@@ -476,6 +579,85 @@ func (q *Queries) GetMaxCyclePosition(ctx context.Context, teamID pgtype.UUID) (
 	var max_position float32
 	err := row.Scan(&max_position)
 	return max_position, err
+}
+
+const listCompletedCyclesForDashboard = `-- name: ListCompletedCyclesForDashboard :many
+SELECT c.id, c.workspace_id, c.team_id, c.name, c.description, c.number, c.status, c.starts_at, c.ends_at, c.cooldown_ends_at, c.completed_at, c.scope_history, c.completed_scope_history, c.started_scope_history, c.position, c.created_at, c.updated_at, t.name as team_name, t.color as team_color, t.identifier as team_identifier
+FROM cycle c
+JOIN team t ON t.id = c.team_id
+WHERE c.workspace_id = $1
+  AND c.status IN ('completed', 'active')
+ORDER BY c.ends_at DESC
+LIMIT $2
+`
+
+type ListCompletedCyclesForDashboardParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	Limit       int32       `json:"limit"`
+}
+
+type ListCompletedCyclesForDashboardRow struct {
+	ID                    pgtype.UUID        `json:"id"`
+	WorkspaceID           pgtype.UUID        `json:"workspace_id"`
+	TeamID                pgtype.UUID        `json:"team_id"`
+	Name                  string             `json:"name"`
+	Description           pgtype.Text        `json:"description"`
+	Number                int32              `json:"number"`
+	Status                string             `json:"status"`
+	StartsAt              pgtype.Timestamptz `json:"starts_at"`
+	EndsAt                pgtype.Timestamptz `json:"ends_at"`
+	CooldownEndsAt        pgtype.Timestamptz `json:"cooldown_ends_at"`
+	CompletedAt           pgtype.Timestamptz `json:"completed_at"`
+	ScopeHistory          []byte             `json:"scope_history"`
+	CompletedScopeHistory []byte             `json:"completed_scope_history"`
+	StartedScopeHistory   []byte             `json:"started_scope_history"`
+	Position              float32            `json:"position"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+	TeamName              string             `json:"team_name"`
+	TeamColor             string             `json:"team_color"`
+	TeamIdentifier        string             `json:"team_identifier"`
+}
+
+func (q *Queries) ListCompletedCyclesForDashboard(ctx context.Context, arg ListCompletedCyclesForDashboardParams) ([]ListCompletedCyclesForDashboardRow, error) {
+	rows, err := q.db.Query(ctx, listCompletedCyclesForDashboard, arg.WorkspaceID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListCompletedCyclesForDashboardRow{}
+	for rows.Next() {
+		var i ListCompletedCyclesForDashboardRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.TeamID,
+			&i.Name,
+			&i.Description,
+			&i.Number,
+			&i.Status,
+			&i.StartsAt,
+			&i.EndsAt,
+			&i.CooldownEndsAt,
+			&i.CompletedAt,
+			&i.ScopeHistory,
+			&i.CompletedScopeHistory,
+			&i.StartedScopeHistory,
+			&i.Position,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.TeamName,
+			&i.TeamColor,
+			&i.TeamIdentifier,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listCycles = `-- name: ListCycles :many
@@ -572,7 +754,7 @@ func (q *Queries) ListCyclesByStatus(ctx context.Context, arg ListCyclesByStatus
 }
 
 const listIssuesByCycle = `-- name: ListIssuesByCycle :many
-SELECT i.id, i.workspace_id, i.title, i.description, i.status, i.priority, i.assignee_type, i.assignee_id, i.creator_type, i.creator_id, i.parent_issue_id, i.acceptance_criteria, i.context_refs, i.position, i.due_date, i.created_at, i.updated_at, i.number, i.project_id, i.origin_type, i.origin_id, i.first_executed_at, i.team_id, i.cycle_id, i.estimate FROM issue i
+SELECT i.id, i.workspace_id, i.title, i.description, i.status, i.priority, i.assignee_type, i.assignee_id, i.creator_type, i.creator_id, i.parent_issue_id, i.acceptance_criteria, i.context_refs, i.position, i.due_date, i.created_at, i.updated_at, i.number, i.project_id, i.origin_type, i.origin_id, i.first_executed_at, i.team_id, i.cycle_id, i.estimate, i.start_date FROM issue i
 WHERE i.cycle_id = $1
 ORDER BY i.status ASC, i.position ASC
 `
@@ -612,6 +794,7 @@ func (q *Queries) ListIssuesByCycle(ctx context.Context, cycleID pgtype.UUID) ([
 			&i.TeamID,
 			&i.CycleID,
 			&i.Estimate,
+			&i.StartDate,
 		); err != nil {
 			return nil, err
 		}

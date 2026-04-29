@@ -18,6 +18,7 @@ export interface CardProperties {
   description: boolean;
   assignee: boolean;
   dueDate: boolean;
+  cycle: boolean;
   project: boolean;
   childProgress: boolean;
 }
@@ -40,6 +41,7 @@ export const CARD_PROPERTY_OPTIONS: { key: keyof CardProperties; label: string }
   { key: "description", label: "Description" },
   { key: "assignee", label: "Assignee" },
   { key: "dueDate", label: "Due date" },
+  { key: "cycle", label: "Cycle" },
   { key: "project", label: "Project" },
   { key: "childProgress", label: "Sub-issue progress" },
 ];
@@ -90,6 +92,7 @@ export const viewStoreSlice = (set: StoreApi<IssueViewState>["setState"]): Issue
     description: true,
     assignee: true,
     dueDate: true,
+    cycle: false,
     project: true,
     childProgress: true,
   },

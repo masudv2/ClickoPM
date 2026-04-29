@@ -26,11 +26,13 @@ export function CyclePicker({
   teamId,
   onUpdate,
   align = "start",
+  triggerRender,
 }: {
   cycleId: string | null;
   teamId: string;
   onUpdate: (updates: Partial<UpdateIssueRequest>) => void;
   align?: "start" | "center" | "end";
+  triggerRender?: React.ReactElement;
 }) {
   const wsId = useWorkspaceId();
   const { data: cycles = [] } = useQuery(cycleListOptions(wsId, teamId));
@@ -39,7 +41,10 @@ export function CyclePicker({
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger className="flex items-center gap-1.5 cursor-pointer rounded px-1 -mx-1 hover:bg-accent/30 transition-colors overflow-hidden">
+      <DropdownMenuTrigger
+        {...(triggerRender ? { render: triggerRender } : {})}
+        className={triggerRender ? undefined : "flex items-center gap-1.5 cursor-pointer rounded px-1 -mx-1 hover:bg-accent/30 transition-colors overflow-hidden"}
+      >
         <Timer className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         <span className="truncate">{current ? current.name : "No cycle"}</span>
       </DropdownMenuTrigger>
