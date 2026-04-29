@@ -77,7 +77,7 @@ CREATE TABLE ticket (
     linked_issue_id UUID REFERENCES issue(id) ON DELETE SET NULL,
     pending_reply BOOLEAN NOT NULL DEFAULT false,
     source TEXT NOT NULL DEFAULT 'portal'
-        CHECK (source IN ('portal', 'email', 'manual')),
+        CHECK (source IN ('portal', 'email', 'manual', 'internal')),
     first_response_at TIMESTAMPTZ,
     first_response_due TIMESTAMPTZ,
     next_update_due TIMESTAMPTZ,
