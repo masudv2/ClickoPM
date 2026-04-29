@@ -66,13 +66,15 @@ function CallbackContent() {
           const wsList = await api.listWorkspaces();
           qc.setQueryData(workspaceKeys.list(), wsList);
           const onboarded = loggedInUser.onboarded_at != null;
+          if (nextUrl) {
+            router.push(nextUrl);
+            return;
+          }
           if (!onboarded) {
             router.push(paths.onboarding());
             return;
           }
-          router.push(
-            nextUrl || resolvePostAuthDestination(wsList, onboarded),
-          );
+          router.push(resolvePostAuthDestination(wsList, onboarded));
         })
         .catch((err) => {
           setError(err instanceof Error ? err.message : "Login failed");
