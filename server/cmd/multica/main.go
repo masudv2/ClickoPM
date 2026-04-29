@@ -39,6 +39,8 @@ func init() {
 	// Core commands
 	issueCmd.GroupID = groupCore
 	projectCmd.GroupID = groupCore
+	cycleCmd.GroupID = groupCore
+	ticketCmd.GroupID = groupCore
 	agentCmd.GroupID = groupCore
 	autopilotCmd.GroupID = groupCore
 	workspaceCmd.GroupID = groupCore
@@ -60,6 +62,8 @@ func init() {
 
 	rootCmd.AddCommand(issueCmd)
 	rootCmd.AddCommand(projectCmd)
+	rootCmd.AddCommand(cycleCmd)
+	rootCmd.AddCommand(ticketCmd)
 	rootCmd.AddCommand(agentCmd)
 	rootCmd.AddCommand(autopilotCmd)
 	rootCmd.AddCommand(workspaceCmd)
@@ -74,6 +78,11 @@ func init() {
 	rootCmd.AddCommand(configCmd)
 	rootCmd.AddCommand(updateCmd)
 	rootCmd.AddCommand(versionCmd)
+	rootCmd.AddCommand(teamCmd)
+	rootCmd.AddCommand(labelCmd)
+	rootCmd.AddCommand(dashboardCmd)
+	rootCmd.AddCommand(workloadCmd)
+	rootCmd.AddCommand(inboxCmd)
 
 	initHelp(rootCmd)
 }

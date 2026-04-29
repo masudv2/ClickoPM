@@ -2,7 +2,9 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -95,6 +97,10 @@ func (h *Handler) CreateLabel(w http.ResponseWriter, r *http.Request) {
 		Position:    maxPos + 1,
 	})
 	if err != nil {
+		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
+			writeError(w, http.StatusConflict, fmt.Sprintf("label %q already exists", req.Name))
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "failed to create label")
 		return
 	}
