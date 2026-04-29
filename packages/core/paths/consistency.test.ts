@@ -30,6 +30,9 @@ describe("paths.workspace() shape", () => {
         "dashboard",
         "roadmap",
         "workload",
+        "clients",
+        "portal",
+        "tickets",
       ]),
     );
   });
@@ -52,6 +55,8 @@ describe("paths.workspace() shape", () => {
       ["dashboard", "dashboard"],
       ["roadmap", "roadmap"],
       ["workload", "workload"],
+      ["clients", "clients"],
+      ["tickets", "tickets"],
     ];
     const wsAsAny = ws as unknown as Record<string, () => string>;
     for (const [method, segment] of expectedSegments) {
@@ -59,6 +64,8 @@ describe("paths.workspace() shape", () => {
       expect(typeof fn).toBe("function");
       expect(fn!()).toBe(`/acme/${segment}`);
     }
+    // portal() returns /{slug}/portal/tickets (nested path)
+    expect(wsAsAny["portal"]!()).toBe("/acme/portal/tickets");
   });
 });
 
