@@ -28,7 +28,7 @@ import { getProjectIssueMetrics } from "./project-issue-metrics";
 import { ActorAvatar } from "../../common/actor-avatar";
 import { AppLink, useNavigation } from "../../navigation";
 import { TitleEditor, ContentEditor, type ContentEditorRef } from "../../editor";
-import { MilestonesSidebarBlock } from "../../milestones/components";
+import { MilestonesSidebarBlock, MilestoneDatePicker } from "../../milestones/components";
 import { PriorityIcon } from "../../issues/components/priority-icon";
 import { IssuesHeader } from "../../issues/components/issues-header";
 import { BoardView } from "../../issues/components/board-view";
@@ -470,6 +470,20 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
                 </div>
               </PopoverContent>
             </Popover>
+          </PropRow>
+          <PropRow label="Start">
+            <MilestoneDatePicker
+              value={project.start_date ?? null}
+              onChange={(v) => handleUpdateField({ start_date: v })}
+              placeholder="Start date"
+            />
+          </PropRow>
+          <PropRow label="Target">
+            <MilestoneDatePicker
+              value={project.target_date ?? null}
+              onChange={(v) => handleUpdateField({ target_date: v })}
+              placeholder="Target date"
+            />
           </PropRow>
         </div>}
       </div>
