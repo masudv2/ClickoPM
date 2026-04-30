@@ -6,6 +6,7 @@ import { CornerDownRight } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@multica/ui/components/ui/tooltip";
 import { AppLink } from "../../navigation";
 import { useNavigation } from "../../navigation";
+import { MilestoneChip } from "../../milestones/components";
 import type { Issue } from "@multica/core/types";
 import { ActorAvatar } from "../../common/actor-avatar";
 import { useIssueSelectionStore } from "@multica/core/issues/stores/selection-store";
@@ -54,6 +55,7 @@ export const ListRow = memo(function ListRow({
   const showAssignee = storeProperties.assignee && issue.assignee_type && issue.assignee_id;
   const showDueDate = storeProperties.dueDate && issue.due_date;
   const showParent = !!issue.parent_issue_id && (issue.parent_title || issue.parent_identifier);
+  const showMilestone = !!issue.milestone_id && !!issue.milestone_name;
 
   return (
     <IssueActionsContextMenu issue={issue}>
@@ -129,6 +131,13 @@ export const ListRow = memo(function ListRow({
                   : (issue.parent_identifier ?? issue.parent_title)}
               </TooltipContent>
             </Tooltip>
+          )}
+          {showMilestone && (
+            <MilestoneChip
+              milestoneId={issue.milestone_id!}
+              milestoneName={issue.milestone_name!}
+              projectId={issue.project_id ?? undefined}
+            />
           )}
           {showProject && (
             <span className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground max-w-[140px]">

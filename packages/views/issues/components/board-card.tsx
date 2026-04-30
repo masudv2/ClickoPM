@@ -19,6 +19,7 @@ import { projectListOptions } from "@multica/core/projects/queries";
 import { PriorityIcon } from "./priority-icon";
 import { PriorityPicker, AssigneePicker, DueDatePicker } from "./pickers";
 import { CyclePicker } from "../../cycles/components/cycle-picker";
+import { MilestoneChip } from "../../milestones/components";
 import { PRIORITY_CONFIG } from "@multica/core/issues/config";
 import { useViewStore } from "@multica/core/issues/stores/view-store-context";
 import { ProgressRing } from "./progress-ring";
@@ -83,6 +84,7 @@ export const BoardCardContent = memo(function BoardCardContent({
   const showProject = storeProperties.project && project;
   const showChildProgress = storeProperties.childProgress && childProgress;
   const showParent = !!issue.parent_issue_id && (issue.parent_title || issue.parent_identifier);
+  const showMilestone = !!issue.milestone_id && !!issue.milestone_name;
   const p = useWorkspacePaths();
   const navigation = useNavigation();
 
@@ -97,7 +99,7 @@ export const BoardCardContent = memo(function BoardCardContent({
       </p>
 
       {/* Sub-issue progress + cycle + parent + project */}
-      {(showChildProgress || showCycle || showParent || showProject) && (
+      {(showChildProgress || showCycle || showParent || showMilestone || showProject) && (
         <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
           {showChildProgress && (
             <div className="inline-flex items-center gap-1 rounded-full bg-muted/60 px-1.5 py-0.5">
@@ -148,6 +150,14 @@ export const BoardCardContent = memo(function BoardCardContent({
                   : (issue.parent_identifier ?? issue.parent_title)}
               </TooltipContent>
             </Tooltip>
+          )}
+          {showMilestone && (
+            <MilestoneChip
+              milestoneId={issue.milestone_id!}
+              milestoneName={issue.milestone_name!}
+              projectId={issue.project_id ?? undefined}
+              className="rounded-full bg-muted/60 px-1.5 py-0.5 text-[11px] max-w-[140px]"
+            />
           )}
           {showProject && (
             <span className="inline-flex items-center gap-1 rounded-full bg-muted/60 px-1.5 py-0.5 text-[11px] text-muted-foreground max-w-[160px]">
