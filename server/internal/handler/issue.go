@@ -746,6 +746,10 @@ func (h *Handler) ListIssues(w http.ResponseWriter, r *http.Request) {
 	if t := r.URL.Query().Get("team_id"); t != "" {
 		teamFilter = parseUUID(t)
 	}
+	var milestoneFilter pgtype.UUID
+	if m := r.URL.Query().Get("milestone_id"); m != "" {
+		milestoneFilter = parseUUID(m)
+	}
 
 	prefixMap := h.teamPrefixMap(ctx, wsUUID)
 
@@ -834,6 +838,7 @@ func (h *Handler) ListIssues(w http.ResponseWriter, r *http.Request) {
 		CreatorID:   creatorFilter,
 		ProjectID:   projectFilter,
 		TeamID:      teamFilter,
+		MilestoneID: milestoneFilter,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list issues")

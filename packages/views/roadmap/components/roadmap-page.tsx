@@ -10,9 +10,11 @@ import { useWorkspaceId } from "@multica/core/hooks";
 import { useWorkspacePaths } from "@multica/core/paths";
 import { teamListOptions } from "@multica/core/teams";
 import { roadmapProjectsOptions, projectKeys } from "@multica/core/projects/queries";
+import { projectMilestonesOptions } from "@multica/core/milestones";
 import { memberListOptions } from "@multica/core/workspace/queries";
 import { api } from "@multica/core/api";
-import type { RoadmapProject, Team, ProjectHealthStatus, Issue } from "@multica/core/types";
+import type { RoadmapProject, Team, ProjectHealthStatus, Issue, Milestone } from "@multica/core/types";
+import { Diamond } from "lucide-react";
 import { ActorAvatar } from "@multica/ui/components/common/actor-avatar";
 
 type ZoomLevel = "day" | "week" | "month" | "quarter";
@@ -341,6 +343,39 @@ function ProjectBar({
   );
 }
 
+function MilestoneBar({
+  milestone, pxPerDay, timelineStart, onClick,
+}: {
+  milestone: Milestone;
+  pxPerDay: number;
+  timelineStart: Date;
+  onClick?: () => void;
+}) {
+  const start = milestone.start_date ? new Date(milestone.start_date) : null;
+  const end = milestone.target_date ? new Date(milestone.target_date) : null;
+  if (!start && !end) return <div style={{ height: DETAIL_ROW_HEIGHT }} />;
+
+  const origStart = start ?? new Date(end!.getTime() - 14 * 86400000);
+  const origEnd = end ?? new Date(origStart.getTime() + 14 * 86400000);
+
+  const left = daysBetween(timelineStart, origStart) * pxPerDay;
+  const width = Math.max(daysBetween(origStart, origEnd) * pxPerDay, 20);
+
+  return (
+    <div style={{ height: DETAIL_ROW_HEIGHT }} className="relative flex items-center">
+      <div
+        onClick={onClick}
+        className="absolute h-6 rounded flex items-center gap-1.5 px-2 cursor-pointer bg-primary/15 border border-primary/40 hover:bg-primary/25 transition-colors"
+        style={{ left: Math.max(left, 0), width: Math.max(width, 20) }}
+      >
+        <Diamond className="size-3 text-primary shrink-0" />
+        <span className="text-[11px] truncate text-foreground/80">{milestone.name}</span>
+        <span className="ml-auto text-[10px] text-muted-foreground tabular-nums shrink-0">{milestone.percent}%</span>
+      </div>
+    </div>
+  );
+}
+
 function IssueBar({
   issue, pxPerDay, timelineStart, members, drag, onDragStart, didDragRef, onClick,
 }: {
@@ -526,6 +561,7 @@ export function RoadmapPage() {
   const qc = useQueryClient();
   const [teamFilter, setTeamFilter] = useState<string | undefined>(undefined);
   const [selectedProject, setSelectedProject] = useState<RoadmapProject | null>(null);
+  const [selectedMilestone, setSelectedMilestone] = useState<{ id: string; name: string; start_date: string | null; target_date: string | null } | null>(null);
   const [zoom, setZoom] = useState<ZoomLevel>("month");
   const scrollRef = useRef<HTMLDivElement>(null);
   const hasScrolledToToday = useRef(false);
@@ -533,11 +569,15 @@ export function RoadmapPage() {
   const { data: teams = [] } = useQuery(teamListOptions(wsId));
   const { data: projects = [] } = useQuery(roadmapProjectsOptions(wsId, teamFilter));
   const { data: members = [] } = useQuery(memberListOptions(wsId));
-  const { data: projectIssues = [] } = useQuery({
-    queryKey: ["issues", wsId, "project", selectedProject?.id],
-    queryFn: () => api.listIssues({ project_id: selectedProject!.id, limit: 200 }),
-    select: (data) => data.issues,
+  const { data: projectMilestones = [] } = useQuery({
+    ...projectMilestonesOptions(wsId, selectedProject?.id ?? ""),
     enabled: !!selectedProject,
+  });
+  const { data: milestoneIssues = [] } = useQuery({
+    queryKey: ["issues", wsId, "milestone", selectedMilestone?.id],
+    queryFn: () => api.listIssues({ milestone_id: selectedMilestone!.id, limit: 200 }),
+    select: (data) => data.issues,
+    enabled: !!selectedMilestone,
   });
 
   const updateProjectMut = useMutation({
@@ -623,32 +663,74 @@ export function RoadmapPage() {
   }, [projects.length, scrollToToday]);
 
   if (selectedProject) {
+    // Mode: project selected (showing milestones), or milestone selected (showing milestone's issues)
+    const showingIssues = !!selectedMilestone;
     return (
       <div className="flex flex-col h-full">
         <div className="flex items-center gap-3 px-6 py-3 border-b shrink-0">
-          <Button variant="ghost" size="sm" onClick={() => setSelectedProject(null)}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              if (showingIssues) setSelectedMilestone(null);
+              else setSelectedProject(null);
+            }}
+          >
             <ChevronLeft className="size-4 mr-1" /> Back
           </Button>
-          <div className="flex items-center gap-2">
-            <h1 className="text-lg font-semibold">{selectedProject.title}</h1>
-            {selectedProject.health_status && (
-              <span className={cn("px-2 py-0.5 rounded text-xs border", HEALTH_CONFIG[selectedProject.health_status].className)}>
+          <div className="flex items-center gap-1.5 text-sm">
+            <button
+              type="button"
+              className="text-muted-foreground hover:text-foreground"
+              onClick={() => setSelectedMilestone(null)}
+            >
+              {selectedProject.title}
+            </button>
+            {showingIssues && (
+              <>
+                <ChevronLeft className="size-3 text-muted-foreground/50 rotate-180" />
+                <h1 className="text-lg font-semibold flex items-center gap-1.5">
+                  <Diamond className="size-4 text-primary" />
+                  {selectedMilestone!.name}
+                </h1>
+              </>
+            )}
+            {!showingIssues && (
+              <>
+                <ChevronLeft className="size-3 text-muted-foreground/50 rotate-180" />
+                <h1 className="text-lg font-semibold">Milestones</h1>
+              </>
+            )}
+            {!showingIssues && selectedProject.health_status && (
+              <span className={cn("ml-2 px-2 py-0.5 rounded text-xs border", HEALTH_CONFIG[selectedProject.health_status].className)}>
                 {HEALTH_CONFIG[selectedProject.health_status].label}
               </span>
             )}
           </div>
           <div className="flex items-center gap-2 ml-auto text-sm text-muted-foreground">
-            {selectedProject.start_date && selectedProject.target_date && (
-              <span>
-                {new Date(selectedProject.start_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                <ArrowRight className="inline size-3 mx-1" />
-                {new Date(selectedProject.target_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-              </span>
+            {showingIssues ? (
+              <>
+                {selectedMilestone!.start_date && selectedMilestone!.target_date && (
+                  <span>
+                    {new Date(selectedMilestone!.start_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    <ArrowRight className="inline size-3 mx-1" />
+                    {new Date(selectedMilestone!.target_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                  </span>
+                )}
+                <span className="text-foreground font-medium">{milestoneIssues.length} issues</span>
+              </>
+            ) : (
+              <>
+                {selectedProject.start_date && selectedProject.target_date && (
+                  <span>
+                    {new Date(selectedProject.start_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    <ArrowRight className="inline size-3 mx-1" />
+                    {new Date(selectedProject.target_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                  </span>
+                )}
+                <span className="text-foreground font-medium">{projectMilestones.length} milestones</span>
+              </>
             )}
-            <span className="text-foreground font-medium">
-              {selectedProject.done_count}/{selectedProject.issue_count} done
-              ({selectedProject.issue_count > 0 ? Math.round((selectedProject.done_count / selectedProject.issue_count) * 100) : 0}%)
-            </span>
           </div>
           <div className="flex items-center gap-1 ml-4">
             {ZOOM_LEVELS.map((z) => (
@@ -660,44 +742,70 @@ export function RoadmapPage() {
         </div>
 
         <div className="flex flex-1 min-h-0">
-          {/* Left panel - issues list */}
+          {/* Left panel - milestones or issues list */}
           <div className="w-80 border-r shrink-0 overflow-y-auto">
             <div className="flex items-center justify-between px-4 border-b text-xs font-medium text-muted-foreground uppercase tracking-wider" style={{ height: ROW_HEIGHT }}>
-              {projectIssues.length} Issues
+              {showingIssues
+                ? `${milestoneIssues.length} Issues`
+                : `${projectMilestones.length} Milestones`}
             </div>
-            {/* Project bar row in left panel */}
             <div className="border-b border-border/30 bg-muted/10" style={{ height: ROW_HEIGHT }} />
-            {projectIssues.map((issue) => {
-              const isDone = issue.status === "done" || issue.status === "cancelled";
-              const isInProgress = issue.status === "in_progress" || issue.status === "in_review";
-              const assignee = issue.assignee_id && issue.assignee_type === "member" ? memberMap[issue.assignee_id] : null;
-              return (
-                <div
-                  key={issue.id}
-                  className="flex items-center gap-2 px-4 text-sm border-b border-border/20 cursor-pointer hover:bg-accent/30 transition-colors"
-                  style={{ height: DETAIL_ROW_HEIGHT }}
-                  onClick={() => window.open(wsPaths.issueDetail(issue.id), "_blank")}
-                >
-                  <span className={cn(
-                    "size-2 rounded-full shrink-0",
-                    isDone && "bg-green-500",
-                    isInProgress && "bg-blue-500",
-                    !isDone && !isInProgress && "border border-muted-foreground/50",
-                  )} />
-                  <span className="flex-1 truncate">{issue.title}</span>
-                  {assignee && (
-                    <ActorAvatar name={assignee.name} initials={assignee.name[0]!.toUpperCase()} avatarUrl={assignee.avatar_url} size={16} />
-                  )}
-                  {(issue.start_date || issue.due_date) && (
+            {showingIssues
+              ? milestoneIssues.map((issue) => {
+                  const isDone = issue.status === "done" || issue.status === "cancelled";
+                  const isInProgress = issue.status === "in_progress" || issue.status === "in_review";
+                  const assignee = issue.assignee_id && issue.assignee_type === "member" ? memberMap[issue.assignee_id] : null;
+                  return (
+                    <div
+                      key={issue.id}
+                      className="flex items-center gap-2 px-4 text-sm border-b border-border/20 cursor-pointer hover:bg-accent/30 transition-colors"
+                      style={{ height: DETAIL_ROW_HEIGHT }}
+                      onClick={() => window.open(wsPaths.issueDetail(issue.id), "_blank")}
+                    >
+                      <span className={cn(
+                        "size-2 rounded-full shrink-0",
+                        isDone && "bg-green-500",
+                        isInProgress && "bg-blue-500",
+                        !isDone && !isInProgress && "border border-muted-foreground/50",
+                      )} />
+                      <span className="flex-1 truncate">{issue.title}</span>
+                      {assignee && (
+                        <ActorAvatar name={assignee.name} initials={assignee.name[0]!.toUpperCase()} avatarUrl={assignee.avatar_url} size={16} />
+                      )}
+                      {(issue.start_date || issue.due_date) && (
+                        <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">
+                          {issue.start_date && issue.due_date
+                            ? `${new Date(issue.start_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })} - ${new Date(issue.due_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                            : new Date(issue.due_date ?? issue.start_date!).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })
+              : projectMilestones.map((m) => (
+                  <div
+                    key={m.id}
+                    className="flex items-center gap-2 px-4 text-sm border-b border-border/20 cursor-pointer hover:bg-accent/30 transition-colors"
+                    style={{ height: DETAIL_ROW_HEIGHT }}
+                    onClick={() => setSelectedMilestone({ id: m.id, name: m.name, start_date: m.start_date, target_date: m.target_date })}
+                  >
+                    <Diamond className={cn(
+                      "size-3.5 shrink-0",
+                      m.derived_status === "completed" && "fill-primary text-primary",
+                      m.derived_status === "in_progress" && "text-primary",
+                      m.derived_status === "planned" && "text-muted-foreground",
+                    )} />
+                    <span className="flex-1 truncate">{m.name}</span>
                     <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">
-                      {issue.start_date && issue.due_date
-                        ? `${new Date(issue.start_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })} - ${new Date(issue.due_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
-                        : new Date(issue.due_date ?? issue.start_date!).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      {m.percent}% of {m.total_count}
                     </span>
-                  )}
-                </div>
-              );
-            })}
+                    {m.target_date && (
+                      <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">
+                        {new Date(m.target_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      </span>
+                    )}
+                  </div>
+                ))}
           </div>
 
           {/* Timeline panel */}
@@ -705,15 +813,25 @@ export function RoadmapPage() {
             <TimelineHeader columns={columns} timelineStart={timelineStart} timelineEnd={timelineEnd} pxPerDay={pxPerDay} zoom={zoom} />
             <div className="relative" style={{ width: totalWidth, minHeight: "100%" }}>
               <TodayLine timelineStart={timelineStart} pxPerDay={pxPerDay} totalDays={totalDays} />
-              {/* Project bar row */}
+              {/* Project (or milestone) header bar */}
               <div className="border-b border-border/30">
                 <ProjectBar project={selectedProject} pxPerDay={pxPerDay} timelineStart={timelineStart} onClick={() => window.open(wsPaths.projectDetail(selectedProject.id), "_blank")} drag={drag} onDragStart={onDragStart} didDragRef={didDragRef} members={memberMap} />
               </div>
-              {projectIssues.map((issue) => (
-                <div key={issue.id} className="border-b border-border/20">
-                  <IssueBar issue={issue} pxPerDay={pxPerDay} timelineStart={timelineStart} members={memberMap} drag={drag} onDragStart={onDragStart} didDragRef={didDragRef} onClick={() => window.open(wsPaths.issueDetail(issue.id), "_blank")} />
-                </div>
-              ))}
+              {showingIssues
+                ? milestoneIssues.map((issue) => (
+                    <div key={issue.id} className="border-b border-border/20">
+                      <IssueBar issue={issue} pxPerDay={pxPerDay} timelineStart={timelineStart} members={memberMap} drag={drag} onDragStart={onDragStart} didDragRef={didDragRef} onClick={() => window.open(wsPaths.issueDetail(issue.id), "_blank")} />
+                    </div>
+                  ))
+                : projectMilestones.map((m) => (
+                    <MilestoneBar
+                      key={m.id}
+                      milestone={m}
+                      pxPerDay={pxPerDay}
+                      timelineStart={timelineStart}
+                      onClick={() => setSelectedMilestone({ id: m.id, name: m.name, start_date: m.start_date, target_date: m.target_date })}
+                    />
+                  ))}
             </div>
           </div>
         </div>

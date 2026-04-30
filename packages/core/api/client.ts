@@ -398,6 +398,7 @@ export class ApiClient {
     if (params?.creator_id) search.set("creator_id", params.creator_id);
     if (params?.project_id) search.set("project_id", params.project_id);
     if (params?.team_id) search.set("team_id", params.team_id);
+    if (params?.milestone_id) search.set("milestone_id", params.milestone_id);
     if (params?.open_only) search.set("open_only", "true");
     return this.fetch(`/api/issues?${search}`);
   }

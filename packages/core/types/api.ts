@@ -49,6 +49,7 @@ export interface ListIssuesParams {
   creator_id?: string;
   project_id?: string;
   team_id?: string;
+  milestone_id?: string;
   open_only?: boolean;
 }
 
