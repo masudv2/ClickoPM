@@ -43,6 +43,7 @@ import { IssueActionsDropdown, useIssueActions } from "../actions";
 import { ProjectPicker } from "../../projects/components/project-picker";
 import { LabelPicker } from "../../labels/components/label-picker";
 import { CyclePicker } from "../../cycles/components/cycle-picker";
+import { MilestonePicker } from "../../milestones/components";
 import { EstimatePicker } from "../../cycles/components/estimate-picker";
 import { cycleDetailOptions } from "@multica/core/cycles/queries";
 import type { CycleWithProgress } from "@multica/core/types";
@@ -436,6 +437,9 @@ export function IssueDetail({ issueId, onDelete, defaultSidebarOpen = true, layo
           </PropRow>
           <PropRow label="Project">
             <ProjectPicker projectId={issue.project_id} onUpdate={handleUpdateField} />
+          </PropRow>
+          <PropRow label="Milestone">
+            <MilestonePicker projectId={issue.project_id} milestoneId={issue.milestone_id} onUpdate={handleUpdateField} />
           </PropRow>
           <PropRow label="Labels">
             <LabelPicker issueId={issue.id} labels={issue.labels ?? []} />
