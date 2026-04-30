@@ -40,6 +40,7 @@ func init() {
 	issueCmd.GroupID = groupCore
 	projectCmd.GroupID = groupCore
 	cycleCmd.GroupID = groupCore
+	milestoneCmd.GroupID = groupCore
 	ticketCmd.GroupID = groupCore
 	agentCmd.GroupID = groupCore
 	autopilotCmd.GroupID = groupCore
