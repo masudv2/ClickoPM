@@ -72,8 +72,8 @@ export function MilestoneFormDialog({
         <DialogHeader>
           <DialogTitle>{isEdit ? "Edit milestone" : "New milestone"}</DialogTitle>
         </DialogHeader>
-        <div className="space-y-3">
-          <div>
+        <div className="space-y-4">
+          <div className="space-y-1.5">
             <Label htmlFor="ms-name">Name</Label>
             <Input
               id="ms-name"
@@ -83,7 +83,7 @@ export function MilestoneFormDialog({
               autoFocus
             />
           </div>
-          <div>
+          <div className="space-y-1.5">
             <Label htmlFor="ms-desc">Description</Label>
             <Textarea
               id="ms-desc"

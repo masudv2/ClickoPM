@@ -81,16 +81,23 @@ func init() {
 	projectCreateCmd.Flags().String("title", "", "Project title (required)")
 	projectCreateCmd.Flags().String("description", "", "Project description")
 	projectCreateCmd.Flags().String("status", "", "Project status")
+	projectCreateCmd.Flags().String("priority", "", "Project priority (urgent, high, medium, low, none)")
 	projectCreateCmd.Flags().String("icon", "", "Project icon (emoji)")
 	projectCreateCmd.Flags().String("lead", "", "Lead name (member or agent)")
+	projectCreateCmd.Flags().String("team", "", "Team ID")
+	projectCreateCmd.Flags().String("start-date", "", "Start date (YYYY-MM-DD)")
+	projectCreateCmd.Flags().String("target-date", "", "Target date (YYYY-MM-DD)")
 	projectCreateCmd.Flags().String("output", "json", "Output format: table or json")
 
 	// project update
 	projectUpdateCmd.Flags().String("title", "", "New title")
 	projectUpdateCmd.Flags().String("description", "", "New description")
 	projectUpdateCmd.Flags().String("status", "", "New status")
+	projectUpdateCmd.Flags().String("priority", "", "New priority (urgent, high, medium, low, none)")
 	projectUpdateCmd.Flags().String("icon", "", "New icon (emoji)")
 	projectUpdateCmd.Flags().String("lead", "", "New lead name (member or agent)")
+	projectUpdateCmd.Flags().String("start-date", "", "Start date (YYYY-MM-DD; \"\" to clear)")
+	projectUpdateCmd.Flags().String("target-date", "", "Target date (YYYY-MM-DD; \"\" to clear)")
 	projectUpdateCmd.Flags().String("output", "json", "Output format: table or json")
 
 	// project delete
@@ -226,6 +233,18 @@ func runProjectCreate(cmd *cobra.Command, _ []string) error {
 		body["lead_type"] = aType
 		body["lead_id"] = aID
 	}
+	if v, _ := cmd.Flags().GetString("priority"); v != "" {
+		body["priority"] = v
+	}
+	if v, _ := cmd.Flags().GetString("team"); v != "" {
+		body["team_id"] = v
+	}
+	if v, _ := cmd.Flags().GetString("start-date"); v != "" {
+		body["start_date"] = v
+	}
+	if v, _ := cmd.Flags().GetString("target-date"); v != "" {
+		body["target_date"] = v
+	}
 
 	var result map[string]any
 	if err := client.PostJSON(ctx, "/api/projects", body, &result); err != nil {
@@ -282,9 +301,29 @@ func runProjectUpdate(cmd *cobra.Command, args []string) error {
 		body["lead_type"] = aType
 		body["lead_id"] = aID
 	}
+	if cmd.Flags().Changed("priority") {
+		v, _ := cmd.Flags().GetString("priority")
+		body["priority"] = v
+	}
+	if cmd.Flags().Changed("start-date") {
+		v, _ := cmd.Flags().GetString("start-date")
+		if v == "" {
+			body["start_date"] = nil
+		} else {
+			body["start_date"] = v
+		}
+	}
+	if cmd.Flags().Changed("target-date") {
+		v, _ := cmd.Flags().GetString("target-date")
+		if v == "" {
+			body["target_date"] = nil
+		} else {
+			body["target_date"] = v
+		}
+	}
 
 	if len(body) == 0 {
-		return fmt.Errorf("no fields to update; use flags like --title, --status, --description, --icon, --lead")
+		return fmt.Errorf("no fields to update; use flags like --title, --status, --priority, --description, --icon, --lead, --start-date, --target-date")
 	}
 
 	var result map[string]any

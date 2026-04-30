@@ -478,6 +478,7 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
               value={project.start_date ?? null}
               onChange={(v) => handleUpdateField({ start_date: v })}
               placeholder="Start date"
+              compact
             />
           </PropRow>
           <PropRow label="Target">
@@ -485,6 +486,7 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
               value={project.target_date ?? null}
               onChange={(v) => handleUpdateField({ target_date: v })}
               placeholder="Target date"
+              compact
             />
           </PropRow>
         </div>}
