@@ -83,6 +83,8 @@ func init() {
 	rootCmd.AddCommand(dashboardCmd)
 	rootCmd.AddCommand(workloadCmd)
 	rootCmd.AddCommand(inboxCmd)
+	rootCmd.AddCommand(migrateCmd)
+	rootCmd.AddCommand(milestoneCmd)
 
 	initHelp(rootCmd)
 }

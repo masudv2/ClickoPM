@@ -16,6 +16,7 @@ export interface CreateIssueRequest {
   start_date?: string;
   attachment_ids?: string[];
   cycle_id?: string;
+  milestone_id?: string;
   estimate?: number;
   team_id?: string;
 }
@@ -33,6 +34,7 @@ export interface UpdateIssueRequest {
   parent_issue_id?: string | null;
   project_id?: string | null;
   cycle_id?: string | null;
+  milestone_id?: string | null;
   estimate?: number | null;
 }
 
@@ -47,6 +49,7 @@ export interface ListIssuesParams {
   creator_id?: string;
   project_id?: string;
   team_id?: string;
+  milestone_id?: string;
   open_only?: boolean;
 }
 

@@ -39,6 +39,8 @@ export interface Issue {
   parent_issue_id: string | null;
   parent_identifier?: string;
   parent_title?: string;
+  milestone_id?: string | null;
+  milestone_name?: string;
   project_id: string | null;
   cycle_id: string | null;
   estimate: number | null;

@@ -81,6 +81,10 @@ import type {
   CreateCycleRequest,
   UpdateCycleRequest,
   ListCyclesResponse,
+  Milestone,
+  CreateMilestoneRequest,
+  UpdateMilestoneRequest,
+  ListMilestonesResponse,
   DashboardData,
   WorkloadData,
   WorkloadIssue,
@@ -394,6 +398,7 @@ export class ApiClient {
     if (params?.creator_id) search.set("creator_id", params.creator_id);
     if (params?.project_id) search.set("project_id", params.project_id);
     if (params?.team_id) search.set("team_id", params.team_id);
+    if (params?.milestone_id) search.set("milestone_id", params.milestone_id);
     if (params?.open_only) search.set("open_only", "true");
     return this.fetch(`/api/issues?${search}`);
   }
@@ -1213,6 +1218,41 @@ export class ApiClient {
 
   async listCycleIssues(id: string): Promise<{ issues: Issue[] }> {
     return this.fetch(`/api/cycles/${id}/issues`);
+  }
+
+  // Milestones
+
+  async listMilestones(projectId: string): Promise<ListMilestonesResponse> {
+    return this.fetch(`/api/projects/${projectId}/milestones`);
+  }
+
+  async getMilestone(id: string): Promise<Milestone> {
+    return this.fetch(`/api/milestones/${id}`);
+  }
+
+  async createMilestone(projectId: string, data: CreateMilestoneRequest): Promise<Milestone> {
+    return this.fetch(`/api/projects/${projectId}/milestones`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateMilestone(id: string, data: UpdateMilestoneRequest): Promise<Milestone> {
+    return this.fetch(`/api/milestones/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteMilestone(id: string): Promise<void> {
+    await this.fetch(`/api/milestones/${id}`, { method: "DELETE" });
+  }
+
+  async reorderMilestones(projectId: string, ids: string[], positions: number[]): Promise<void> {
+    await this.fetch(`/api/projects/${projectId}/milestones/reorder`, {
+      method: "POST",
+      body: JSON.stringify({ ids, positions }),
+    });
   }
 
   async createCycle(teamId: string, data: CreateCycleRequest): Promise<Cycle> {

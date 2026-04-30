@@ -310,6 +310,7 @@ type Issue struct {
 	CycleID            pgtype.UUID        `json:"cycle_id"`
 	Estimate           pgtype.Int4        `json:"estimate"`
 	StartDate          pgtype.Date        `json:"start_date"`
+	MilestoneID        pgtype.UUID        `json:"milestone_id"`
 }
 
 type IssueDependency struct {
@@ -358,6 +359,18 @@ type Member struct {
 	UserID      pgtype.UUID        `json:"user_id"`
 	Role        string             `json:"role"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type Milestone struct {
+	ID          pgtype.UUID        `json:"id"`
+	ProjectID   pgtype.UUID        `json:"project_id"`
+	Name        string             `json:"name"`
+	Description pgtype.Text        `json:"description"`
+	StartDate   pgtype.Date        `json:"start_date"`
+	TargetDate  pgtype.Date        `json:"target_date"`
+	Position    float64            `json:"position"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
 type PersonalAccessToken struct {

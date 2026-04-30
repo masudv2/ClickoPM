@@ -137,6 +137,32 @@ export class TestApiClient {
     await this.authedFetch(`/api/issues/${id}`, { method: "DELETE" });
   }
 
+  async listMilestones(projectId: string) {
+    const res = await this.authedFetch(`/api/projects/${projectId}/milestones`);
+    const j = await res.json();
+    return j.milestones as Array<{ id: string; name: string }>;
+  }
+
+  async createMilestone(projectId: string, name: string, extras: Record<string, unknown> = {}) {
+    const res = await this.authedFetch(`/api/projects/${projectId}/milestones`, {
+      method: "POST",
+      body: JSON.stringify({ name, ...extras }),
+    });
+    return res.json();
+  }
+
+  async deleteMilestone(id: string) {
+    await this.authedFetch(`/api/milestones/${id}`, { method: "DELETE" });
+  }
+
+  async updateIssue(id: string, patch: Record<string, unknown>) {
+    const res = await this.authedFetch(`/api/issues/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(patch),
+    });
+    return res.json();
+  }
+
   /** Clean up all issues created during this test. */
   async cleanup() {
     for (const id of this.createdIssueIds) {

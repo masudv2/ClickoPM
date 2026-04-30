@@ -763,6 +763,7 @@ func (h *Handler) CreateIssueFromTicket(w http.ResponseWriter, r *http.Request) 
 	prefix := h.getTeamIssuePrefix(r.Context(), issue.TeamID)
 	resp := issueToResponse(issue, prefix)
 	h.enrichSingleWithParent(r.Context(), &resp)
+	h.enrichSingleWithMilestone(r.Context(), &resp)
 	writeJSON(w, http.StatusCreated, resp)
 }
 

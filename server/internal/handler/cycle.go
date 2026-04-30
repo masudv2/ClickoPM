@@ -356,6 +356,7 @@ func (h *Handler) ListCycleIssues(w http.ResponseWriter, r *http.Request) {
 		resp[i] = issueToResponse(iss, prefixMap[uuidToString(iss.TeamID)])
 	}
 	h.enrichWithParents(r.Context(), resp, prefixMap)
+	h.enrichWithMilestones(r.Context(), resp)
 	writeJSON(w, http.StatusOK, map[string]any{"issues": resp})
 }
 

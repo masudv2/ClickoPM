@@ -754,7 +754,7 @@ func (q *Queries) ListCyclesByStatus(ctx context.Context, arg ListCyclesByStatus
 }
 
 const listIssuesByCycle = `-- name: ListIssuesByCycle :many
-SELECT i.id, i.workspace_id, i.title, i.description, i.status, i.priority, i.assignee_type, i.assignee_id, i.creator_type, i.creator_id, i.parent_issue_id, i.acceptance_criteria, i.context_refs, i.position, i.due_date, i.created_at, i.updated_at, i.number, i.project_id, i.origin_type, i.origin_id, i.first_executed_at, i.team_id, i.cycle_id, i.estimate, i.start_date FROM issue i
+SELECT i.id, i.workspace_id, i.title, i.description, i.status, i.priority, i.assignee_type, i.assignee_id, i.creator_type, i.creator_id, i.parent_issue_id, i.acceptance_criteria, i.context_refs, i.position, i.due_date, i.created_at, i.updated_at, i.number, i.project_id, i.origin_type, i.origin_id, i.first_executed_at, i.team_id, i.cycle_id, i.estimate, i.start_date, i.milestone_id FROM issue i
 WHERE i.cycle_id = $1
 ORDER BY i.status ASC, i.position ASC
 `
@@ -795,6 +795,7 @@ func (q *Queries) ListIssuesByCycle(ctx context.Context, cycleID pgtype.UUID) ([
 			&i.CycleID,
 			&i.Estimate,
 			&i.StartDate,
+			&i.MilestoneID,
 		); err != nil {
 			return nil, err
 		}

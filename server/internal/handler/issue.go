@@ -49,6 +49,8 @@ type IssueResponse struct {
 	StartDate          *string                 `json:"start_date"`
 	ParentIdentifier   *string                 `json:"parent_identifier,omitempty"`
 	ParentTitle        *string                 `json:"parent_title,omitempty"`
+	MilestoneID        *string                 `json:"milestone_id,omitempty"`
+	MilestoneName      *string                 `json:"milestone_name,omitempty"`
 }
 
 func issueToResponse(i db.Issue, issuePrefix string) IssueResponse {
@@ -76,6 +78,7 @@ func issueToResponse(i db.Issue, issuePrefix string) IssueResponse {
 		CycleID:       uuidToPtr(i.CycleID),
 		Estimate:      nullInt32Ptr(i.Estimate),
 		StartDate:     dateToPtr(i.StartDate),
+		MilestoneID:   uuidToPtr(i.MilestoneID),
 	}
 }
 
@@ -122,6 +125,57 @@ func (h *Handler) enrichWithParents(ctx context.Context, responses []IssueRespon
 			responses[i].ParentTitle = &title
 		}
 	}
+}
+
+// enrichWithMilestones fills MilestoneName on every response whose MilestoneID
+// is set, in a single batch query.
+func (h *Handler) enrichWithMilestones(ctx context.Context, responses []IssueResponse) {
+	if len(responses) == 0 {
+		return
+	}
+	seen := map[string]bool{}
+	ids := make([]pgtype.UUID, 0, len(responses))
+	for _, r := range responses {
+		if r.MilestoneID == nil || seen[*r.MilestoneID] {
+			continue
+		}
+		seen[*r.MilestoneID] = true
+		ids = append(ids, parseUUID(*r.MilestoneID))
+	}
+	if len(ids) == 0 {
+		return
+	}
+	rows, err := h.Queries.ListMilestoneSummariesByIDs(ctx, ids)
+	if err != nil {
+		return
+	}
+	byID := make(map[string]string, len(rows))
+	for _, m := range rows {
+		byID[uuidToString(m.ID)] = m.Name
+	}
+	for i := range responses {
+		if responses[i].MilestoneID == nil {
+			continue
+		}
+		if name, ok := byID[*responses[i].MilestoneID]; ok {
+			n := name
+			responses[i].MilestoneName = &n
+		}
+	}
+}
+
+// enrichSingleWithMilestone fills MilestoneName on a single response when
+// MilestoneID is set.
+func (h *Handler) enrichSingleWithMilestone(ctx context.Context, resp *IssueResponse) {
+	if resp == nil || resp.MilestoneID == nil {
+		return
+	}
+	rows, err := h.Queries.ListMilestoneSummariesByIDs(ctx, []pgtype.UUID{parseUUID(*resp.MilestoneID)})
+	if err != nil || len(rows) == 0 {
+		return
+	}
+	name := rows[0].Name
+	resp.MilestoneName = &name
 }
 
 // enrichSingleWithParent fills ParentIdentifier and ParentTitle on a single
@@ -176,6 +230,7 @@ func issueListRowToResponse(i db.ListIssuesRow, issuePrefix string) IssueRespons
 		CycleID:       uuidToPtr(i.CycleID),
 		Estimate:      nullInt32Ptr(i.Estimate),
 		StartDate:     dateToPtr(i.StartDate),
+		MilestoneID:   uuidToPtr(i.MilestoneID),
 	}
 }
 
@@ -204,6 +259,7 @@ func openIssueRowToResponse(i db.ListOpenIssuesRow, issuePrefix string) IssueRes
 		CycleID:       uuidToPtr(i.CycleID),
 		Estimate:      nullInt32Ptr(i.Estimate),
 		StartDate:     dateToPtr(i.StartDate),
+		MilestoneID:   uuidToPtr(i.MilestoneID),
 	}
 }
 
@@ -641,9 +697,11 @@ func (h *Handler) SearchIssues(w http.ResponseWriter, r *http.Request) {
 		resp[i] = sir
 	}
 	h.enrichWithParents(ctx, innerForEnrich, searchPrefixMap)
+	h.enrichWithMilestones(ctx, innerForEnrich)
 	for i := range resp {
 		resp[i].ParentIdentifier = innerForEnrich[i].ParentIdentifier
 		resp[i].ParentTitle = innerForEnrich[i].ParentTitle
+		resp[i].MilestoneName = innerForEnrich[i].MilestoneName
 	}
 
 	w.Header().Set("X-Total-Count", strconv.FormatInt(total, 10))
@@ -687,6 +745,10 @@ func (h *Handler) ListIssues(w http.ResponseWriter, r *http.Request) {
 	var teamFilter pgtype.UUID
 	if t := r.URL.Query().Get("team_id"); t != "" {
 		teamFilter = parseUUID(t)
+	}
+	var milestoneFilter pgtype.UUID
+	if m := r.URL.Query().Get("milestone_id"); m != "" {
+		milestoneFilter = parseUUID(m)
 	}
 
 	prefixMap := h.teamPrefixMap(ctx, wsUUID)
@@ -776,6 +838,7 @@ func (h *Handler) ListIssues(w http.ResponseWriter, r *http.Request) {
 		CreatorID:   creatorFilter,
 		ProjectID:   projectFilter,
 		TeamID:      teamFilter,
+		MilestoneID: milestoneFilter,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list issues")
@@ -831,6 +894,7 @@ func (h *Handler) ListIssues(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.enrichWithParents(ctx, resp, prefixMap)
+	h.enrichWithMilestones(ctx, resp)
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"issues": resp,
@@ -878,6 +942,7 @@ func (h *Handler) GetIssue(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.enrichSingleWithParent(r.Context(), &resp)
+	h.enrichSingleWithMilestone(r.Context(), &resp)
 
 	writeJSON(w, http.StatusOK, resp)
 }
@@ -899,6 +964,7 @@ func (h *Handler) ListChildIssues(w http.ResponseWriter, r *http.Request) {
 		resp[i] = issueToResponse(child, childPrefixMap[uuidToString(child.TeamID)])
 	}
 	h.enrichWithParents(r.Context(), resp, childPrefixMap)
+	h.enrichWithMilestones(r.Context(), resp)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"issues": resp,
 	})
@@ -946,6 +1012,7 @@ type CreateIssueRequest struct {
 	StartDate          *string  `json:"start_date"`
 	AttachmentIDs      []string `json:"attachment_ids,omitempty"`
 	CycleID            *string  `json:"cycle_id"`
+	MilestoneID        *string  `json:"milestone_id"`
 	Estimate           *int32   `json:"estimate"`
 }
 
@@ -1067,6 +1134,10 @@ func (h *Handler) CreateIssue(w http.ResponseWriter, r *http.Request) {
 	if req.CycleID != nil {
 		cycleID = parseUUID(*req.CycleID)
 	}
+	var milestoneID pgtype.UUID
+	if req.MilestoneID != nil && *req.MilestoneID != "" {
+		milestoneID = parseUUID(*req.MilestoneID)
+	}
 	var estimate pgtype.Int4
 	if req.Estimate != nil {
 		estimate = pgtype.Int4{Int32: *req.Estimate, Valid: true}
@@ -1091,6 +1162,7 @@ func (h *Handler) CreateIssue(w http.ResponseWriter, r *http.Request) {
 		CycleID:            cycleID,
 		Estimate:           estimate,
 		StartDate:          ptrToDate(req.StartDate),
+		MilestoneID:        milestoneID,
 	})
 	if err != nil {
 		slog.Warn("create issue failed", append(logger.RequestAttrs(r), "error", err, "workspace_id", workspaceID)...)
@@ -1111,6 +1183,7 @@ func (h *Handler) CreateIssue(w http.ResponseWriter, r *http.Request) {
 	prefix := h.getTeamIssuePrefix(r.Context(), issue.TeamID)
 	resp := issueToResponse(issue, prefix)
 	h.enrichSingleWithParent(r.Context(), &resp)
+	h.enrichSingleWithMilestone(r.Context(), &resp)
 
 	// Fetch linked attachments so they appear in the response.
 	if len(req.AttachmentIDs) > 0 {
@@ -1152,6 +1225,7 @@ type UpdateIssueRequest struct {
 	ParentIssueID      *string  `json:"parent_issue_id"`
 	ProjectID          *string  `json:"project_id"`
 	CycleID            *string  `json:"cycle_id"`
+	MilestoneID        *string  `json:"milestone_id"`
 	Estimate           *int32   `json:"estimate"`
 }
 
@@ -1191,6 +1265,7 @@ func (h *Handler) UpdateIssue(w http.ResponseWriter, r *http.Request) {
 		ParentIssueID: prevIssue.ParentIssueID,
 		ProjectID:     prevIssue.ProjectID,
 		CycleID:       prevIssue.CycleID,
+		MilestoneID:   prevIssue.MilestoneID,
 		Estimate:      prevIssue.Estimate,
 	}
 
@@ -1292,6 +1367,13 @@ func (h *Handler) UpdateIssue(w http.ResponseWriter, r *http.Request) {
 			params.CycleID = pgtype.UUID{Valid: false}
 		}
 	}
+	if _, ok := rawFields["milestone_id"]; ok {
+		if req.MilestoneID != nil {
+			params.MilestoneID = parseUUID(*req.MilestoneID)
+		} else {
+			params.MilestoneID = pgtype.UUID{Valid: false}
+		}
+	}
 	if _, ok := rawFields["estimate"]; ok {
 		if req.Estimate != nil {
 			params.Estimate = pgtype.Int4{Int32: *req.Estimate, Valid: true}
@@ -1322,6 +1404,7 @@ func (h *Handler) UpdateIssue(w http.ResponseWriter, r *http.Request) {
 	prefix := h.getTeamIssuePrefix(r.Context(), issue.TeamID)
 	resp := issueToResponse(issue, prefix)
 	h.enrichSingleWithParent(r.Context(), &resp)
+	h.enrichSingleWithMilestone(r.Context(), &resp)
 	slog.Info("issue updated", append(logger.RequestAttrs(r), "issue_id", id, "workspace_id", workspaceID)...)
 
 	assigneeChanged := (req.AssigneeType != nil || req.AssigneeID != nil) &&
@@ -1579,6 +1662,7 @@ func (h *Handler) BatchUpdateIssues(w http.ResponseWriter, r *http.Request) {
 			ParentIssueID: prevIssue.ParentIssueID,
 			ProjectID:     prevIssue.ProjectID,
 			CycleID:       prevIssue.CycleID,
+			MilestoneID:   prevIssue.MilestoneID,
 			Estimate:      prevIssue.Estimate,
 		}
 
@@ -1679,6 +1763,13 @@ func (h *Handler) BatchUpdateIssues(w http.ResponseWriter, r *http.Request) {
 				params.CycleID = pgtype.UUID{Valid: false}
 			}
 		}
+		if _, ok := rawUpdates["milestone_id"]; ok {
+			if req.Updates.MilestoneID != nil {
+				params.MilestoneID = parseUUID(*req.Updates.MilestoneID)
+			} else {
+				params.MilestoneID = pgtype.UUID{Valid: false}
+			}
+		}
 		if _, ok := rawUpdates["estimate"]; ok {
 			if req.Updates.Estimate != nil {
 				params.Estimate = pgtype.Int4{Int32: *req.Updates.Estimate, Valid: true}
@@ -1706,6 +1797,7 @@ func (h *Handler) BatchUpdateIssues(w http.ResponseWriter, r *http.Request) {
 		prefix := h.getTeamIssuePrefix(r.Context(), issue.TeamID)
 		resp := issueToResponse(issue, prefix)
 		h.enrichSingleWithParent(r.Context(), &resp)
+		h.enrichSingleWithMilestone(r.Context(), &resp)
 		actorType, actorID := h.resolveActor(r, userID, workspaceID)
 
 		assigneeChanged := (req.Updates.AssigneeType != nil || req.Updates.AssigneeID != nil) &&

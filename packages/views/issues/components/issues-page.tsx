@@ -43,6 +43,8 @@ export function IssuesPage({ teamIdentifier }: { teamIdentifier?: string } = {})
   const creatorFilters = useIssueViewStore((s) => s.creatorFilters);
   const projectFilters = useIssueViewStore((s) => s.projectFilters);
   const includeNoProject = useIssueViewStore((s) => s.includeNoProject);
+  const milestoneFilters = useIssueViewStore((s) => s.milestoneFilters);
+  const includeNoMilestone = useIssueViewStore((s) => s.includeNoMilestone);
 
   // Clear filter state when switching between workspaces (URL-driven).
   useClearFiltersOnWorkspaceChange(useIssueViewStore, wsId);
@@ -61,8 +63,8 @@ export function IssuesPage({ teamIdentifier }: { teamIdentifier?: string } = {})
   }, [allIssues, scope]);
 
   const issues = useMemo(
-    () => filterIssues(scopedIssues, { statusFilters, priorityFilters, assigneeFilters, includeNoAssignee, creatorFilters, projectFilters, includeNoProject }),
-    [scopedIssues, statusFilters, priorityFilters, assigneeFilters, includeNoAssignee, creatorFilters, projectFilters, includeNoProject],
+    () => filterIssues(scopedIssues, { statusFilters, priorityFilters, assigneeFilters, includeNoAssignee, creatorFilters, projectFilters, includeNoProject, milestoneFilters, includeNoMilestone }),
+    [scopedIssues, statusFilters, priorityFilters, assigneeFilters, includeNoAssignee, creatorFilters, projectFilters, includeNoProject, milestoneFilters, includeNoMilestone],
   );
 
   // Fetch sub-issue progress from the backend so counts are accurate

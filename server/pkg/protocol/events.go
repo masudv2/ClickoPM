@@ -108,4 +108,9 @@ const (
 	EventCycleDeleted   = "cycle:deleted"
 	EventCycleStarted   = "cycle:started"
 	EventCycleCompleted = "cycle:completed"
+
+	// Milestone events
+	EventMilestoneCreated = "milestone:created"
+	EventMilestoneUpdated = "milestone:updated"
+	EventMilestoneDeleted = "milestone:deleted"
 )

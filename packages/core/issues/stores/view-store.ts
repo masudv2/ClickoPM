@@ -55,6 +55,8 @@ export interface IssueViewState {
   creatorFilters: ActorFilterValue[];
   projectFilters: string[];
   includeNoProject: boolean;
+  milestoneFilters: string[];
+  includeNoMilestone: boolean;
   sortBy: SortField;
   sortDirection: SortDirection;
   cardProperties: CardProperties;
@@ -67,6 +69,9 @@ export interface IssueViewState {
   toggleCreatorFilter: (value: ActorFilterValue) => void;
   toggleProjectFilter: (projectId: string) => void;
   toggleNoProject: () => void;
+  toggleMilestoneFilter: (milestoneId: string) => void;
+  toggleNoMilestone: () => void;
+  setMilestoneFilters: (ids: string[]) => void;
   hideStatus: (status: IssueStatus) => void;
   showStatus: (status: IssueStatus) => void;
   clearFilters: () => void;
@@ -85,6 +90,8 @@ export const viewStoreSlice = (set: StoreApi<IssueViewState>["setState"]): Issue
   creatorFilters: [],
   projectFilters: [],
   includeNoProject: false,
+  milestoneFilters: [],
+  includeNoMilestone: false,
   sortBy: "position",
   sortDirection: "asc",
   cardProperties: {
@@ -147,6 +154,15 @@ export const viewStoreSlice = (set: StoreApi<IssueViewState>["setState"]): Issue
     })),
   toggleNoProject: () =>
     set((state) => ({ includeNoProject: !state.includeNoProject })),
+  toggleMilestoneFilter: (milestoneId) =>
+    set((state) => ({
+      milestoneFilters: state.milestoneFilters.includes(milestoneId)
+        ? state.milestoneFilters.filter((id) => id !== milestoneId)
+        : [...state.milestoneFilters, milestoneId],
+    })),
+  toggleNoMilestone: () =>
+    set((state) => ({ includeNoMilestone: !state.includeNoMilestone })),
+  setMilestoneFilters: (ids) => set({ milestoneFilters: ids }),
   hideStatus: (status) =>
     set((state) => {
       // If no filter active, activate filter with all EXCEPT this one
@@ -202,6 +218,8 @@ export const viewStorePersistOptions = (name: string) => ({
     creatorFilters: state.creatorFilters,
     projectFilters: state.projectFilters,
     includeNoProject: state.includeNoProject,
+    milestoneFilters: state.milestoneFilters,
+    includeNoMilestone: state.includeNoMilestone,
     sortBy: state.sortBy,
     sortDirection: state.sortDirection,
     cardProperties: state.cardProperties,

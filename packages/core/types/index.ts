@@ -46,6 +46,7 @@ export type { Label, LabelColor, CreateLabelRequest, UpdateLabelRequest, ListLab
 export type { Team, TeamSettings, TeamMember, CreateTeamRequest, UpdateTeamRequest, ListTeamsResponse, ListTeamMembersResponse } from "./team";
 export type { PinnedItem, PinnedItemType, CreatePinRequest, ReorderPinsRequest } from "./pin";
 export type { Cycle, CycleWithProgress, CycleStatus, HistoryEntry, ScopeStats, BreakdownItem, LabelBreakdownItem, CreateCycleRequest, UpdateCycleRequest, ListCyclesResponse } from "./cycle";
+export type { Milestone, MilestoneDerivedStatus, CreateMilestoneRequest, UpdateMilestoneRequest, ListMilestonesResponse } from "./milestone";
 export type { DashboardStats, CycleSummary, TeamHealth, VelocityDataPoint, DashboardBlocker, DashboardActivity, DashboardData } from "./dashboard";
 export type { WorkloadMember, WorkloadTeam, WorkloadIssue, WorkloadData } from "./workload";
 export type {

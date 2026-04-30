@@ -24,6 +24,7 @@ function workspaceScoped(slug: string) {
     roadmap: () => `${ws}/roadmap`,
     projects: () => `${ws}/projects`,
     projectDetail: (id: string) => `${ws}/projects/${encode(id)}`,
+    projectIssues: (id: string) => `${ws}/projects/${encode(id)}`,
     // Team-scoped paths
     teamIssues: (identifier: string) => `${ws}/team/${encode(identifier)}/issues`,
     teamIssueDetail: (identifier: string, id: string) => `${ws}/team/${encode(identifier)}/issues/${encode(id)}`,
