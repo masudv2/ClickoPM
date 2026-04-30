@@ -28,6 +28,7 @@ import { getProjectIssueMetrics } from "./project-issue-metrics";
 import { ActorAvatar } from "../../common/actor-avatar";
 import { AppLink, useNavigation } from "../../navigation";
 import { TitleEditor, ContentEditor, type ContentEditorRef } from "../../editor";
+import { MilestonesSidebarBlock } from "../../milestones/components";
 import { PriorityIcon } from "../../issues/components/priority-icon";
 import { IssuesHeader } from "../../issues/components/issues-header";
 import { BoardView } from "../../issues/components/board-view";
@@ -111,10 +112,12 @@ function ProjectIssuesContent({
   const assigneeFilters = useViewStore((s) => s.assigneeFilters);
   const includeNoAssignee = useViewStore((s) => s.includeNoAssignee);
   const creatorFilters = useViewStore((s) => s.creatorFilters);
+  const milestoneFilters = useViewStore((s) => s.milestoneFilters);
+  const includeNoMilestone = useViewStore((s) => s.includeNoMilestone);
 
   const issues = useMemo(
-    () => filterIssues(projectIssues, { statusFilters, priorityFilters, assigneeFilters, includeNoAssignee, creatorFilters, projectFilters: [], includeNoProject: false }),
-    [projectIssues, statusFilters, priorityFilters, assigneeFilters, includeNoAssignee, creatorFilters],
+    () => filterIssues(projectIssues, { statusFilters, priorityFilters, assigneeFilters, includeNoAssignee, creatorFilters, projectFilters: [], includeNoProject: false, milestoneFilters, includeNoMilestone }),
+    [projectIssues, statusFilters, priorityFilters, assigneeFilters, includeNoAssignee, creatorFilters, milestoneFilters, includeNoMilestone],
   );
 
   const { data: childProgressMap = new Map() } = useQuery(childIssueProgressOptions(wsId));
@@ -203,6 +206,22 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
   const workspace = useCurrentWorkspace();
   const workspaceName = workspace?.name;
   const { data: project, isLoading } = useQuery(projectDetailOptions(wsId, projectId));
+
+  // Milestone filter state — synced with projectViewStore.milestoneFilters[0]
+  // so the issue list filters down when a milestone is selected in the sidebar.
+  const [milestoneFilter, setMilestoneFilterState] = useState<string | null>(null);
+  const setMilestoneFilter = useCallback((id: string | null) => {
+    setMilestoneFilterState(id);
+    projectViewStore.getState().setMilestoneFilters(id ? [id] : []);
+  }, []);
+
+  // Seed milestone filter from URL ?milestone=ID on mount.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get("milestone");
+    if (id) setMilestoneFilter(id);
+  }, [setMilestoneFilter]);
   const projectScope = `project:${projectId}`;
   const projectFilter = useMemo<MyIssuesFilter>(
     () => ({ project_id: projectId }),
@@ -481,6 +500,13 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
           </div>
         );
       })()}
+
+      {/* Milestones */}
+      <MilestonesSidebarBlock
+        projectId={projectId}
+        selectedId={milestoneFilter}
+        onSelect={setMilestoneFilter}
+      />
 
       {/* Description */}
       <div>
