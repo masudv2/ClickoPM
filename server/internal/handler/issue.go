@@ -49,6 +49,8 @@ type IssueResponse struct {
 	StartDate          *string                 `json:"start_date"`
 	ParentIdentifier   *string                 `json:"parent_identifier,omitempty"`
 	ParentTitle        *string                 `json:"parent_title,omitempty"`
+	MilestoneID        *string                 `json:"milestone_id,omitempty"`
+	MilestoneName      *string                 `json:"milestone_name,omitempty"`
 }
 
 func issueToResponse(i db.Issue, issuePrefix string) IssueResponse {
@@ -76,6 +78,7 @@ func issueToResponse(i db.Issue, issuePrefix string) IssueResponse {
 		CycleID:       uuidToPtr(i.CycleID),
 		Estimate:      nullInt32Ptr(i.Estimate),
 		StartDate:     dateToPtr(i.StartDate),
+		MilestoneID:   uuidToPtr(i.MilestoneID),
 	}
 }
 
@@ -176,6 +179,7 @@ func issueListRowToResponse(i db.ListIssuesRow, issuePrefix string) IssueRespons
 		CycleID:       uuidToPtr(i.CycleID),
 		Estimate:      nullInt32Ptr(i.Estimate),
 		StartDate:     dateToPtr(i.StartDate),
+		MilestoneID:   uuidToPtr(i.MilestoneID),
 	}
 }
 
@@ -204,6 +208,7 @@ func openIssueRowToResponse(i db.ListOpenIssuesRow, issuePrefix string) IssueRes
 		CycleID:       uuidToPtr(i.CycleID),
 		Estimate:      nullInt32Ptr(i.Estimate),
 		StartDate:     dateToPtr(i.StartDate),
+		MilestoneID:   uuidToPtr(i.MilestoneID),
 	}
 }
 
@@ -946,6 +951,7 @@ type CreateIssueRequest struct {
 	StartDate          *string  `json:"start_date"`
 	AttachmentIDs      []string `json:"attachment_ids,omitempty"`
 	CycleID            *string  `json:"cycle_id"`
+	MilestoneID        *string  `json:"milestone_id"`
 	Estimate           *int32   `json:"estimate"`
 }
 
@@ -1067,6 +1073,10 @@ func (h *Handler) CreateIssue(w http.ResponseWriter, r *http.Request) {
 	if req.CycleID != nil {
 		cycleID = parseUUID(*req.CycleID)
 	}
+	var milestoneID pgtype.UUID
+	if req.MilestoneID != nil && *req.MilestoneID != "" {
+		milestoneID = parseUUID(*req.MilestoneID)
+	}
 	var estimate pgtype.Int4
 	if req.Estimate != nil {
 		estimate = pgtype.Int4{Int32: *req.Estimate, Valid: true}
@@ -1091,6 +1101,7 @@ func (h *Handler) CreateIssue(w http.ResponseWriter, r *http.Request) {
 		CycleID:            cycleID,
 		Estimate:           estimate,
 		StartDate:          ptrToDate(req.StartDate),
+		MilestoneID:        milestoneID,
 	})
 	if err != nil {
 		slog.Warn("create issue failed", append(logger.RequestAttrs(r), "error", err, "workspace_id", workspaceID)...)
@@ -1152,6 +1163,7 @@ type UpdateIssueRequest struct {
 	ParentIssueID      *string  `json:"parent_issue_id"`
 	ProjectID          *string  `json:"project_id"`
 	CycleID            *string  `json:"cycle_id"`
+	MilestoneID        *string  `json:"milestone_id"`
 	Estimate           *int32   `json:"estimate"`
 }
 
@@ -1191,6 +1203,7 @@ func (h *Handler) UpdateIssue(w http.ResponseWriter, r *http.Request) {
 		ParentIssueID: prevIssue.ParentIssueID,
 		ProjectID:     prevIssue.ProjectID,
 		CycleID:       prevIssue.CycleID,
+		MilestoneID:   prevIssue.MilestoneID,
 		Estimate:      prevIssue.Estimate,
 	}
 
@@ -1290,6 +1303,13 @@ func (h *Handler) UpdateIssue(w http.ResponseWriter, r *http.Request) {
 			params.CycleID = parseUUID(*req.CycleID)
 		} else {
 			params.CycleID = pgtype.UUID{Valid: false}
+		}
+	}
+	if _, ok := rawFields["milestone_id"]; ok {
+		if req.MilestoneID != nil {
+			params.MilestoneID = parseUUID(*req.MilestoneID)
+		} else {
+			params.MilestoneID = pgtype.UUID{Valid: false}
 		}
 	}
 	if _, ok := rawFields["estimate"]; ok {
@@ -1579,6 +1599,7 @@ func (h *Handler) BatchUpdateIssues(w http.ResponseWriter, r *http.Request) {
 			ParentIssueID: prevIssue.ParentIssueID,
 			ProjectID:     prevIssue.ProjectID,
 			CycleID:       prevIssue.CycleID,
+			MilestoneID:   prevIssue.MilestoneID,
 			Estimate:      prevIssue.Estimate,
 		}
 
@@ -1677,6 +1698,13 @@ func (h *Handler) BatchUpdateIssues(w http.ResponseWriter, r *http.Request) {
 				params.CycleID = parseUUID(*req.Updates.CycleID)
 			} else {
 				params.CycleID = pgtype.UUID{Valid: false}
+			}
+		}
+		if _, ok := rawUpdates["milestone_id"]; ok {
+			if req.Updates.MilestoneID != nil {
+				params.MilestoneID = parseUUID(*req.Updates.MilestoneID)
+			} else {
+				params.MilestoneID = pgtype.UUID{Valid: false}
 			}
 		}
 		if _, ok := rawUpdates["estimate"]; ok {

@@ -2,7 +2,7 @@
 SELECT id, workspace_id, title, description, status, priority,
        assignee_type, assignee_id, creator_type, creator_id,
        parent_issue_id, position, due_date, created_at, updated_at, number, project_id, team_id,
-       cycle_id, estimate, start_date
+       cycle_id, estimate, start_date, milestone_id
 FROM issue
 WHERE workspace_id = $1
   AND (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status'))
@@ -12,6 +12,7 @@ WHERE workspace_id = $1
   AND (sqlc.narg('creator_id')::uuid IS NULL OR creator_id = sqlc.narg('creator_id'))
   AND (sqlc.narg('project_id')::uuid IS NULL OR project_id = sqlc.narg('project_id'))
   AND (sqlc.narg('team_id')::uuid IS NULL OR team_id = sqlc.narg('team_id'))
+  AND (sqlc.narg('milestone_id')::uuid IS NULL OR milestone_id = sqlc.narg('milestone_id'))
 ORDER BY position ASC, created_at DESC
 LIMIT $2 OFFSET $3;
 
@@ -28,10 +29,10 @@ INSERT INTO issue (
     workspace_id, title, description, status, priority,
     assignee_type, assignee_id, creator_type, creator_id,
     parent_issue_id, position, due_date, number, project_id, team_id,
-    cycle_id, estimate, start_date
+    cycle_id, estimate, start_date, milestone_id
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-    $16, $17, $18
+    $16, $17, $18, $19
 ) RETURNING *;
 
 -- name: GetIssueByNumber :one
@@ -52,6 +53,7 @@ UPDATE issue SET
     parent_issue_id = sqlc.narg('parent_issue_id'),
     project_id = sqlc.narg('project_id'),
     cycle_id = sqlc.narg('cycle_id'),
+    milestone_id = sqlc.narg('milestone_id'),
     estimate = sqlc.narg('estimate'),
     updated_at = now()
 WHERE id = $1
@@ -82,7 +84,7 @@ DELETE FROM issue WHERE id = $1;
 SELECT id, workspace_id, title, description, status, priority,
        assignee_type, assignee_id, creator_type, creator_id,
        parent_issue_id, position, due_date, created_at, updated_at, number, project_id, team_id,
-       cycle_id, estimate, start_date
+       cycle_id, estimate, start_date, milestone_id
 FROM issue
 WHERE workspace_id = $1
   AND status NOT IN ('done', 'cancelled')

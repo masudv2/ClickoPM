@@ -137,10 +137,10 @@ INSERT INTO issue (
     workspace_id, title, description, status, priority,
     assignee_type, assignee_id, creator_type, creator_id,
     parent_issue_id, position, due_date, number, project_id, team_id,
-    cycle_id, estimate, start_date
+    cycle_id, estimate, start_date, milestone_id
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-    $16, $17, $18
+    $16, $17, $18, $19
 ) RETURNING id, workspace_id, title, description, status, priority, assignee_type, assignee_id, creator_type, creator_id, parent_issue_id, acceptance_criteria, context_refs, position, due_date, created_at, updated_at, number, project_id, origin_type, origin_id, first_executed_at, team_id, cycle_id, estimate, start_date, milestone_id
 `
 
@@ -163,6 +163,7 @@ type CreateIssueParams struct {
 	CycleID       pgtype.UUID        `json:"cycle_id"`
 	Estimate      pgtype.Int4        `json:"estimate"`
 	StartDate     pgtype.Date        `json:"start_date"`
+	MilestoneID   pgtype.UUID        `json:"milestone_id"`
 }
 
 func (q *Queries) CreateIssue(ctx context.Context, arg CreateIssueParams) (Issue, error) {
@@ -185,6 +186,7 @@ func (q *Queries) CreateIssue(ctx context.Context, arg CreateIssueParams) (Issue
 		arg.CycleID,
 		arg.Estimate,
 		arg.StartDate,
+		arg.MilestoneID,
 	)
 	var i Issue
 	err := row.Scan(
@@ -780,7 +782,7 @@ const listIssues = `-- name: ListIssues :many
 SELECT id, workspace_id, title, description, status, priority,
        assignee_type, assignee_id, creator_type, creator_id,
        parent_issue_id, position, due_date, created_at, updated_at, number, project_id, team_id,
-       cycle_id, estimate, start_date
+       cycle_id, estimate, start_date, milestone_id
 FROM issue
 WHERE workspace_id = $1
   AND ($4::text IS NULL OR status = $4)
@@ -790,6 +792,7 @@ WHERE workspace_id = $1
   AND ($8::uuid IS NULL OR creator_id = $8)
   AND ($9::uuid IS NULL OR project_id = $9)
   AND ($10::uuid IS NULL OR team_id = $10)
+  AND ($11::uuid IS NULL OR milestone_id = $11)
 ORDER BY position ASC, created_at DESC
 LIMIT $2 OFFSET $3
 `
@@ -805,6 +808,7 @@ type ListIssuesParams struct {
 	CreatorID   pgtype.UUID   `json:"creator_id"`
 	ProjectID   pgtype.UUID   `json:"project_id"`
 	TeamID      pgtype.UUID   `json:"team_id"`
+	MilestoneID pgtype.UUID   `json:"milestone_id"`
 }
 
 type ListIssuesRow struct {
@@ -829,6 +833,7 @@ type ListIssuesRow struct {
 	CycleID       pgtype.UUID        `json:"cycle_id"`
 	Estimate      pgtype.Int4        `json:"estimate"`
 	StartDate     pgtype.Date        `json:"start_date"`
+	MilestoneID   pgtype.UUID        `json:"milestone_id"`
 }
 
 func (q *Queries) ListIssues(ctx context.Context, arg ListIssuesParams) ([]ListIssuesRow, error) {
@@ -843,6 +848,7 @@ func (q *Queries) ListIssues(ctx context.Context, arg ListIssuesParams) ([]ListI
 		arg.CreatorID,
 		arg.ProjectID,
 		arg.TeamID,
+		arg.MilestoneID,
 	)
 	if err != nil {
 		return nil, err
@@ -873,6 +879,7 @@ func (q *Queries) ListIssues(ctx context.Context, arg ListIssuesParams) ([]ListI
 			&i.CycleID,
 			&i.Estimate,
 			&i.StartDate,
+			&i.MilestoneID,
 		); err != nil {
 			return nil, err
 		}
@@ -888,7 +895,7 @@ const listOpenIssues = `-- name: ListOpenIssues :many
 SELECT id, workspace_id, title, description, status, priority,
        assignee_type, assignee_id, creator_type, creator_id,
        parent_issue_id, position, due_date, created_at, updated_at, number, project_id, team_id,
-       cycle_id, estimate, start_date
+       cycle_id, estimate, start_date, milestone_id
 FROM issue
 WHERE workspace_id = $1
   AND status NOT IN ('done', 'cancelled')
@@ -933,6 +940,7 @@ type ListOpenIssuesRow struct {
 	CycleID       pgtype.UUID        `json:"cycle_id"`
 	Estimate      pgtype.Int4        `json:"estimate"`
 	StartDate     pgtype.Date        `json:"start_date"`
+	MilestoneID   pgtype.UUID        `json:"milestone_id"`
 }
 
 func (q *Queries) ListOpenIssues(ctx context.Context, arg ListOpenIssuesParams) ([]ListOpenIssuesRow, error) {
@@ -974,6 +982,7 @@ func (q *Queries) ListOpenIssues(ctx context.Context, arg ListOpenIssuesParams) 
 			&i.CycleID,
 			&i.Estimate,
 			&i.StartDate,
+			&i.MilestoneID,
 		); err != nil {
 			return nil, err
 		}
@@ -1033,7 +1042,8 @@ UPDATE issue SET
     parent_issue_id = $11,
     project_id = $12,
     cycle_id = $13,
-    estimate = $14,
+    milestone_id = $14,
+    estimate = $15,
     updated_at = now()
 WHERE id = $1
 RETURNING id, workspace_id, title, description, status, priority, assignee_type, assignee_id, creator_type, creator_id, parent_issue_id, acceptance_criteria, context_refs, position, due_date, created_at, updated_at, number, project_id, origin_type, origin_id, first_executed_at, team_id, cycle_id, estimate, start_date, milestone_id
@@ -1053,6 +1063,7 @@ type UpdateIssueParams struct {
 	ParentIssueID pgtype.UUID        `json:"parent_issue_id"`
 	ProjectID     pgtype.UUID        `json:"project_id"`
 	CycleID       pgtype.UUID        `json:"cycle_id"`
+	MilestoneID   pgtype.UUID        `json:"milestone_id"`
 	Estimate      pgtype.Int4        `json:"estimate"`
 }
 
@@ -1071,6 +1082,7 @@ func (q *Queries) UpdateIssue(ctx context.Context, arg UpdateIssueParams) (Issue
 		arg.ParentIssueID,
 		arg.ProjectID,
 		arg.CycleID,
+		arg.MilestoneID,
 		arg.Estimate,
 	)
 	var i Issue
