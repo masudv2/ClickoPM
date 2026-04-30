@@ -28,7 +28,7 @@ import { getProjectIssueMetrics } from "./project-issue-metrics";
 import { ActorAvatar } from "../../common/actor-avatar";
 import { AppLink, useNavigation } from "../../navigation";
 import { TitleEditor, ContentEditor, type ContentEditorRef } from "../../editor";
-import { MilestonesSidebarBlock, MilestoneDatePicker } from "../../milestones/components";
+import { MilestonesSidebarBlock, MilestoneDatePicker, MilestonesSection } from "../../milestones/components";
 import { PriorityIcon } from "../../issues/components/priority-icon";
 import { IssuesHeader } from "../../issues/components/issues-header";
 import { BoardView } from "../../issues/components/board-view";
@@ -243,7 +243,9 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
   const createPin = useCreatePin();
   const deletePinMut = useDeletePin();
   const descEditorRef = useRef<ContentEditorRef>(null);
+  const overviewDescEditorRef = useRef<ContentEditorRef>(null);
   const isMobile = useIsMobile();
+  const [activeTab, setActiveTab] = useState<"overview" | "issues">("issues");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const [propertiesOpen, setPropertiesOpen] = useState(true);
@@ -557,6 +559,28 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
               </AppLink>
               <ChevronRight className="h-3 w-3 text-muted-foreground/50 shrink-0" />
               <span className="truncate">{project.title}</span>
+              <div className="ml-3 flex items-center gap-0.5 rounded-md border border-border/60 p-0.5">
+                <button
+                  type="button"
+                  className={cn(
+                    "px-2 py-0.5 text-xs rounded transition-colors",
+                    activeTab === "overview" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground",
+                  )}
+                  onClick={() => setActiveTab("overview")}
+                >
+                  Overview
+                </button>
+                <button
+                  type="button"
+                  className={cn(
+                    "px-2 py-0.5 text-xs rounded transition-colors",
+                    activeTab === "issues" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground",
+                  )}
+                  onClick={() => setActiveTab("issues")}
+                >
+                  Issues
+                </button>
+              </div>
             </div>
             <div className="flex items-center gap-1 shrink-0">
               <Button
@@ -636,7 +660,8 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
             </div>
           </PageHeader>
 
-          <ViewStoreProvider store={projectViewStore}>
+          {activeTab === "issues" && (
+            <ViewStoreProvider store={projectViewStore}>
               <IssuesHeader scopedIssues={projectIssues} />
               <ProjectIssuesContent
                 projectIssues={projectIssues}
@@ -645,6 +670,49 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
               />
               <BatchActionToolbar teamId={project?.team_id} />
             </ViewStoreProvider>
+          )}
+          {activeTab === "overview" && (
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              <div className="mx-auto w-full max-w-3xl px-8 py-10 space-y-6">
+                <div>
+                  <button
+                    type="button"
+                    className="text-2xl mb-3 cursor-pointer rounded-lg p-1 -ml-1 hover:bg-accent/60 transition-colors"
+                    onClick={() => setIconPickerOpen(true)}
+                    title="Change icon"
+                  >
+                    {project.icon || "📦"}
+                  </button>
+                  <TitleEditor
+                    key={`overview-title-${projectId}`}
+                    defaultValue={project.title}
+                    placeholder="Project title"
+                    className="w-full text-2xl font-semibold leading-tight tracking-tight"
+                    onBlur={(value) => {
+                      const trimmed = value.trim();
+                      if (trimmed && trimmed !== project.title) handleUpdateField({ title: trimmed });
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Description</h3>
+                  <div className="min-h-[200px] rounded-md">
+                    <ContentEditor
+                      ref={overviewDescEditorRef}
+                      key={`overview-desc-${projectId}`}
+                      defaultValue={project.description || ""}
+                      placeholder="Add the project scope, goals, epic, and anything else worth knowing..."
+                      onUpdate={(md) => handleUpdateField({ description: md || null })}
+                      debounceMs={1500}
+                    />
+                  </div>
+                </div>
+
+                <MilestonesSection projectId={projectId} />
+              </div>
+            </div>
+          )}
           </div>
         </ResizablePanel>
         {!isMobile && <ResizableHandle />}
