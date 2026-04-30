@@ -15,6 +15,7 @@ import { Textarea } from "@multica/ui/components/ui/textarea";
 import { useCreateMilestone, useUpdateMilestone } from "@multica/core/milestones";
 import { toast } from "sonner";
 import type { Milestone } from "@multica/core/types";
+import { MilestoneDatePicker } from "./milestone-date-picker";
 
 export function MilestoneFormDialog({
   open,
@@ -93,13 +94,13 @@ export function MilestoneFormDialog({
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label htmlFor="ms-start">Start date</Label>
-              <Input id="ms-start" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            <div className="space-y-1.5">
+              <Label>Start date</Label>
+              <MilestoneDatePicker value={startDate || null} onChange={(v) => setStartDate(v ?? "")} placeholder="Start" />
             </div>
-            <div>
-              <Label htmlFor="ms-target">Target date</Label>
-              <Input id="ms-target" type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} />
+            <div className="space-y-1.5">
+              <Label>Target date</Label>
+              <MilestoneDatePicker value={targetDate || null} onChange={(v) => setTargetDate(v ?? "")} placeholder="Target" />
             </div>
           </div>
         </div>
