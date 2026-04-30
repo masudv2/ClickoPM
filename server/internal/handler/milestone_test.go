@@ -159,6 +159,43 @@ func TestDeleteMilestoneUnsetsIssues(t *testing.T) {
 	}
 }
 
+func TestListIssuesIncludesMilestoneName(t *testing.T) {
+	pID := createMilestoneTestProject(t, "T-IssuesMilestoneName")
+	m := createMilestone(t, pID, map[string]any{"name": "Phase 1"})
+
+	w := httptest.NewRecorder()
+	req := newRequest("POST", "/api/issues?workspace_id="+testWorkspaceID, map[string]any{
+		"title":        "X",
+		"status":       "todo",
+		"priority":     "medium",
+		"team_id":      testTeamID,
+		"project_id":   pID,
+		"milestone_id": m.ID,
+	})
+	testHandler.CreateIssue(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("CreateIssue: status=%d body=%s", w.Code, w.Body.String())
+	}
+	var iss IssueResponse
+	json.NewDecoder(w.Body).Decode(&iss)
+	if iss.MilestoneName == nil || *iss.MilestoneName != "Phase 1" {
+		t.Errorf("create-response milestone_name=%v", iss.MilestoneName)
+	}
+
+	gw := httptest.NewRecorder()
+	gr := newRequest("GET", "/api/issues/"+iss.ID, nil)
+	gr = withURLParam(gr, "id", iss.ID)
+	testHandler.GetIssue(gw, gr)
+	if gw.Code != http.StatusOK {
+		t.Fatalf("GetIssue: status=%d", gw.Code)
+	}
+	var got IssueResponse
+	json.NewDecoder(gw.Body).Decode(&got)
+	if got.MilestoneName == nil || *got.MilestoneName != "Phase 1" {
+		t.Errorf("get-response milestone_name=%v", got.MilestoneName)
+	}
+}
+
 func TestUpdateMilestone(t *testing.T) {
 	pID := createMilestoneTestProject(t, "T-UpdateMilestone")
 	m := createMilestone(t, pID, map[string]any{"name": "Old"})

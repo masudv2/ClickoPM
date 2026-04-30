@@ -127,6 +127,57 @@ func (h *Handler) enrichWithParents(ctx context.Context, responses []IssueRespon
 	}
 }
 
+// enrichWithMilestones fills MilestoneName on every response whose MilestoneID
+// is set, in a single batch query.
+func (h *Handler) enrichWithMilestones(ctx context.Context, responses []IssueResponse) {
+	if len(responses) == 0 {
+		return
+	}
+	seen := map[string]bool{}
+	ids := make([]pgtype.UUID, 0, len(responses))
+	for _, r := range responses {
+		if r.MilestoneID == nil || seen[*r.MilestoneID] {
+			continue
+		}
+		seen[*r.MilestoneID] = true
+		ids = append(ids, parseUUID(*r.MilestoneID))
+	}
+	if len(ids) == 0 {
+		return
+	}
+	rows, err := h.Queries.ListMilestoneSummariesByIDs(ctx, ids)
+	if err != nil {
+		return
+	}
+	byID := make(map[string]string, len(rows))
+	for _, m := range rows {
+		byID[uuidToString(m.ID)] = m.Name
+	}
+	for i := range responses {
+		if responses[i].MilestoneID == nil {
+			continue
+		}
+		if name, ok := byID[*responses[i].MilestoneID]; ok {
+			n := name
+			responses[i].MilestoneName = &n
+		}
+	}
+}
+
+// enrichSingleWithMilestone fills MilestoneName on a single response when
+// MilestoneID is set.
+func (h *Handler) enrichSingleWithMilestone(ctx context.Context, resp *IssueResponse) {
+	if resp == nil || resp.MilestoneID == nil {
+		return
+	}
+	rows, err := h.Queries.ListMilestoneSummariesByIDs(ctx, []pgtype.UUID{parseUUID(*resp.MilestoneID)})
+	if err != nil || len(rows) == 0 {
+		return
+	}
+	name := rows[0].Name
+	resp.MilestoneName = &name
+}
+
 // enrichSingleWithParent fills ParentIdentifier and ParentTitle on a single
 // response when ParentIssueID is set. Issues each parent's team prefix one
 // at a time — for batch enrichment use enrichWithParents instead.
@@ -646,9 +697,11 @@ func (h *Handler) SearchIssues(w http.ResponseWriter, r *http.Request) {
 		resp[i] = sir
 	}
 	h.enrichWithParents(ctx, innerForEnrich, searchPrefixMap)
+	h.enrichWithMilestones(ctx, innerForEnrich)
 	for i := range resp {
 		resp[i].ParentIdentifier = innerForEnrich[i].ParentIdentifier
 		resp[i].ParentTitle = innerForEnrich[i].ParentTitle
+		resp[i].MilestoneName = innerForEnrich[i].MilestoneName
 	}
 
 	w.Header().Set("X-Total-Count", strconv.FormatInt(total, 10))
@@ -836,6 +889,7 @@ func (h *Handler) ListIssues(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.enrichWithParents(ctx, resp, prefixMap)
+	h.enrichWithMilestones(ctx, resp)
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"issues": resp,
@@ -883,6 +937,7 @@ func (h *Handler) GetIssue(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.enrichSingleWithParent(r.Context(), &resp)
+	h.enrichSingleWithMilestone(r.Context(), &resp)
 
 	writeJSON(w, http.StatusOK, resp)
 }
@@ -904,6 +959,7 @@ func (h *Handler) ListChildIssues(w http.ResponseWriter, r *http.Request) {
 		resp[i] = issueToResponse(child, childPrefixMap[uuidToString(child.TeamID)])
 	}
 	h.enrichWithParents(r.Context(), resp, childPrefixMap)
+	h.enrichWithMilestones(r.Context(), resp)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"issues": resp,
 	})
@@ -1122,6 +1178,7 @@ func (h *Handler) CreateIssue(w http.ResponseWriter, r *http.Request) {
 	prefix := h.getTeamIssuePrefix(r.Context(), issue.TeamID)
 	resp := issueToResponse(issue, prefix)
 	h.enrichSingleWithParent(r.Context(), &resp)
+	h.enrichSingleWithMilestone(r.Context(), &resp)
 
 	// Fetch linked attachments so they appear in the response.
 	if len(req.AttachmentIDs) > 0 {
@@ -1342,6 +1399,7 @@ func (h *Handler) UpdateIssue(w http.ResponseWriter, r *http.Request) {
 	prefix := h.getTeamIssuePrefix(r.Context(), issue.TeamID)
 	resp := issueToResponse(issue, prefix)
 	h.enrichSingleWithParent(r.Context(), &resp)
+	h.enrichSingleWithMilestone(r.Context(), &resp)
 	slog.Info("issue updated", append(logger.RequestAttrs(r), "issue_id", id, "workspace_id", workspaceID)...)
 
 	assigneeChanged := (req.AssigneeType != nil || req.AssigneeID != nil) &&
@@ -1734,6 +1792,7 @@ func (h *Handler) BatchUpdateIssues(w http.ResponseWriter, r *http.Request) {
 		prefix := h.getTeamIssuePrefix(r.Context(), issue.TeamID)
 		resp := issueToResponse(issue, prefix)
 		h.enrichSingleWithParent(r.Context(), &resp)
+		h.enrichSingleWithMilestone(r.Context(), &resp)
 		actorType, actorID := h.resolveActor(r, userID, workspaceID)
 
 		assigneeChanged := (req.Updates.AssigneeType != nil || req.Updates.AssigneeID != nil) &&
