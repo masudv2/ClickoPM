@@ -7,6 +7,7 @@ import {
   type MyIssuesFilter,
 } from "./queries";
 import { cycleKeys } from "../cycles/queries";
+import { milestoneKeys } from "../milestones/queries";
 import { dashboardKeys } from "../dashboard/queries";
 import {
   addIssueToBuckets,
@@ -136,6 +137,7 @@ export function useCreateIssue() {
     onSettled: () => {
       qc.invalidateQueries({ queryKey: issueKeys.list(wsId) });
       qc.invalidateQueries({ queryKey: cycleKeys.all(wsId) });
+      qc.invalidateQueries({ queryKey: milestoneKeys.all(wsId) });
       qc.invalidateQueries({ queryKey: dashboardKeys.all(wsId) });
     },
   });
@@ -225,6 +227,7 @@ export function useUpdateIssue() {
       qc.invalidateQueries({ queryKey: issueKeys.detail(wsId, vars.id) });
       qc.invalidateQueries({ queryKey: issueKeys.list(wsId) });
       qc.invalidateQueries({ queryKey: cycleKeys.all(wsId) });
+      qc.invalidateQueries({ queryKey: milestoneKeys.all(wsId) });
       qc.invalidateQueries({ queryKey: dashboardKeys.all(wsId) });
       // Invalidate old parent's children cache
       if (ctx?.parentId) {
@@ -290,6 +293,7 @@ export function useDeleteIssue() {
     onSettled: (_data, _err, _id, ctx) => {
       qc.invalidateQueries({ queryKey: issueKeys.list(wsId) });
       qc.invalidateQueries({ queryKey: cycleKeys.all(wsId) });
+      qc.invalidateQueries({ queryKey: milestoneKeys.all(wsId) });
       qc.invalidateQueries({ queryKey: dashboardKeys.all(wsId) });
       if (ctx?.parentIssueId) {
         qc.invalidateQueries({ queryKey: issueKeys.children(wsId, ctx.parentIssueId) });
@@ -344,6 +348,7 @@ export function useBatchUpdateIssues() {
     onSettled: () => {
       qc.invalidateQueries({ queryKey: issueKeys.list(wsId) });
       qc.invalidateQueries({ queryKey: cycleKeys.all(wsId) });
+      qc.invalidateQueries({ queryKey: milestoneKeys.all(wsId) });
       qc.invalidateQueries({ queryKey: dashboardKeys.all(wsId) });
     },
   });
@@ -392,6 +397,7 @@ export function useBatchDeleteIssues() {
     onSettled: (_data, _err, _ids, ctx) => {
       qc.invalidateQueries({ queryKey: issueKeys.list(wsId) });
       qc.invalidateQueries({ queryKey: cycleKeys.all(wsId) });
+      qc.invalidateQueries({ queryKey: milestoneKeys.all(wsId) });
       qc.invalidateQueries({ queryKey: dashboardKeys.all(wsId) });
       if (ctx?.parentIssueIds && ctx.parentIssueIds.size > 0) {
         for (const parentId of ctx.parentIssueIds) {
