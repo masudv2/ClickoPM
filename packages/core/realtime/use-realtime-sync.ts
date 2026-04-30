@@ -17,6 +17,7 @@ import { pinKeys } from "../pins/queries";
 import { autopilotKeys } from "../autopilots/queries";
 import { runtimeKeys } from "../runtimes/queries";
 import { cycleKeys } from "../cycles/queries";
+import { milestoneKeys } from "../milestones/queries";
 import { dashboardKeys } from "../dashboard/queries";
 import {
   onIssueCreated,
@@ -153,6 +154,10 @@ export function useRealtimeSync(
         const wsId = getCurrentWsId();
         if (wsId) qc.invalidateQueries({ queryKey: cycleKeys.all(wsId) });
       },
+      milestone: () => {
+        const wsId = getCurrentWsId();
+        if (wsId) qc.invalidateQueries({ queryKey: milestoneKeys.all(wsId) });
+      },
     };
 
     const timers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -205,6 +210,7 @@ export function useRealtimeSync(
         }
         // Cycle/dashboard stats depend on issue status/cycle_id
         qc.invalidateQueries({ queryKey: cycleKeys.all(wsId) });
+        qc.invalidateQueries({ queryKey: milestoneKeys.all(wsId) });
         qc.invalidateQueries({ queryKey: dashboardKeys.all(wsId) });
       }
     });
@@ -216,6 +222,7 @@ export function useRealtimeSync(
       if (wsId) {
         onIssueCreated(qc, wsId, issue);
         qc.invalidateQueries({ queryKey: cycleKeys.all(wsId) });
+        qc.invalidateQueries({ queryKey: milestoneKeys.all(wsId) });
         qc.invalidateQueries({ queryKey: dashboardKeys.all(wsId) });
       }
     });
@@ -228,6 +235,7 @@ export function useRealtimeSync(
         onIssueDeleted(qc, wsId, issue_id);
         onInboxIssueDeleted(qc, wsId, issue_id);
         qc.invalidateQueries({ queryKey: cycleKeys.all(wsId) });
+        qc.invalidateQueries({ queryKey: milestoneKeys.all(wsId) });
         qc.invalidateQueries({ queryKey: dashboardKeys.all(wsId) });
       }
     });
