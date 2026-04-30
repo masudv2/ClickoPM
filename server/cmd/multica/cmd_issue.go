@@ -197,6 +197,7 @@ func init() {
 	issueCreateCmd.Flags().String("project", "", "Project ID")
 	issueCreateCmd.Flags().String("team", "", "Team ID or name")
 	issueCreateCmd.Flags().String("cycle", "", "Cycle ID")
+	issueCreateCmd.Flags().String("milestone", "", "Milestone ID (issue must also have --project)")
 	issueCreateCmd.Flags().Int("estimate", 0, "Point estimate (1,2,3,5,8,13)")
 	issueCreateCmd.Flags().String("due-date", "", "Due date (RFC3339 format)")
 	issueCreateCmd.Flags().String("start-date", "", "Start date (YYYY-MM-DD format)")
@@ -212,6 +213,7 @@ func init() {
 	issueUpdateCmd.Flags().String("assignee", "", "New assignee name (member or agent)")
 	issueUpdateCmd.Flags().String("project", "", "Project ID (use --project \"\" to clear)")
 	issueUpdateCmd.Flags().String("cycle", "", "Cycle ID (use --cycle \"\" to clear)")
+	issueUpdateCmd.Flags().String("milestone", "", "Milestone ID (use --milestone \"\" to clear)")
 	issueUpdateCmd.Flags().Int("estimate", 0, "Point estimate (1,2,3,5,8,13; use --estimate 0 to clear)")
 	issueUpdateCmd.Flags().String("due-date", "", "New due date (RFC3339 format; use --due-date \"\" to clear)")
 	issueUpdateCmd.Flags().String("start-date", "", "Start date (YYYY-MM-DD; use --start-date \"\" to clear)")
@@ -469,6 +471,9 @@ func runIssueCreate(cmd *cobra.Command, _ []string) error {
 	if v, _ := cmd.Flags().GetString("cycle"); v != "" {
 		body["cycle_id"] = v
 	}
+	if v, _ := cmd.Flags().GetString("milestone"); v != "" {
+		body["milestone_id"] = v
+	}
 	if cmd.Flags().Changed("estimate") {
 		v, _ := cmd.Flags().GetInt("estimate")
 		body["estimate"] = v
@@ -588,6 +593,14 @@ func runIssueUpdate(cmd *cobra.Command, args []string) error {
 			body["cycle_id"] = nil
 		} else {
 			body["cycle_id"] = v
+		}
+	}
+	if cmd.Flags().Changed("milestone") {
+		v, _ := cmd.Flags().GetString("milestone")
+		if v == "" {
+			body["milestone_id"] = nil
+		} else {
+			body["milestone_id"] = v
 		}
 	}
 	if cmd.Flags().Changed("estimate") {

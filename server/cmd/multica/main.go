@@ -84,6 +84,7 @@ func init() {
 	rootCmd.AddCommand(workloadCmd)
 	rootCmd.AddCommand(inboxCmd)
 	rootCmd.AddCommand(migrateCmd)
+	rootCmd.AddCommand(milestoneCmd)
 
 	initHelp(rootCmd)
 }
