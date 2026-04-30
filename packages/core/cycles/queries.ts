@@ -6,6 +6,9 @@ export const cycleKeys = {
   list: (wsId: string, teamId: string) => [...cycleKeys.all(wsId), "list", teamId] as const,
   detail: (wsId: string, id: string) => [...cycleKeys.all(wsId), id] as const,
   active: (wsId: string, teamId: string) => [...cycleKeys.all(wsId), "active", teamId] as const,
+  issues: (wsId: string, id: string) => [...cycleKeys.all(wsId), "issues", id] as const,
+  /** Match-prefix for invalidating/patching every cycle's issues cache for a workspace. */
+  issuesAll: (wsId: string) => [...cycleKeys.all(wsId), "issues"] as const,
 };
 
 export function cycleListOptions(wsId: string, teamId: string) {
@@ -30,5 +33,13 @@ export function activeCycleOptions(wsId: string, teamId: string) {
     queryKey: cycleKeys.active(wsId, teamId),
     queryFn: () => api.getActiveCycle(teamId),
     enabled: !!teamId,
+  });
+}
+
+export function cycleIssuesOptions(wsId: string, id: string) {
+  return queryOptions({
+    queryKey: cycleKeys.issues(wsId, id),
+    queryFn: () => api.listCycleIssues(id).then((r) => r.issues),
+    enabled: !!id,
   });
 }

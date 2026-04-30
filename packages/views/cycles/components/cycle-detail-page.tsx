@@ -7,8 +7,7 @@ import { RefreshCw, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { useWorkspacePaths } from "@multica/core/paths";
 import { teamListOptions } from "@multica/core/teams";
-import { cycleDetailOptions } from "@multica/core/cycles/queries";
-import { issueListOptions } from "@multica/core/issues/queries";
+import { cycleDetailOptions, cycleIssuesOptions } from "@multica/core/cycles/queries";
 import { useUpdateIssue } from "@multica/core/issues/mutations";
 import { STATUS_ORDER } from "@multica/core/issues/config";
 import { createIssueViewStore } from "@multica/core/issues/stores/view-store";
@@ -32,7 +31,7 @@ export function CycleDetailPage({ cycleId, teamIdentifier }: { cycleId: string; 
   const teamId = team?.id ?? "";
 
   const { data: cycle, isLoading } = useQuery(cycleDetailOptions(wsId, cycleId));
-  const { data: allIssues = [] } = useQuery(issueListOptions(wsId, teamId));
+  const { data: cycleIssues = [] } = useQuery(cycleIssuesOptions(wsId, cycleId));
   const updateIssueMutation = useUpdateIssue();
 
   const handleMoveIssue = useCallback(
@@ -50,11 +49,6 @@ export function CycleDetailPage({ cycleId, teamIdentifier }: { cycleId: string; 
       );
     },
     [updateIssueMutation],
-  );
-
-  const cycleIssues = useMemo(
-    () => allIssues.filter((i) => i.cycle_id === cycleId),
-    [allIssues, cycleId],
   );
 
   const visibleStatuses = useMemo(

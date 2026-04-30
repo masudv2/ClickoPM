@@ -345,6 +345,7 @@ func NewRouter(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus, analytics
 			})
 			r.Route("/api/cycles/{id}", func(r chi.Router) {
 				r.Get("/", h.GetCycle)
+				r.Get("/issues", h.ListCycleIssues)
 				r.Put("/", h.UpdateCycle)
 				r.Delete("/", h.DeleteCycle)
 				r.Post("/start", h.StartCycle)

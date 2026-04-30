@@ -1211,6 +1211,10 @@ export class ApiClient {
     return this.fetch(`/api/cycles/${id}`);
   }
 
+  async listCycleIssues(id: string): Promise<{ issues: Issue[] }> {
+    return this.fetch(`/api/cycles/${id}/issues`);
+  }
+
   async createCycle(teamId: string, data: CreateCycleRequest): Promise<Cycle> {
     return this.fetch(`/api/teams/${teamId}/cycles`, {
       method: "POST",

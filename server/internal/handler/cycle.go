@@ -332,6 +332,32 @@ func (h *Handler) GetCycle(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, progress)
 }
 
+func (h *Handler) ListCycleIssues(w http.ResponseWriter, r *http.Request) {
+	workspaceID := h.resolveWorkspaceID(r)
+	id := chi.URLParam(r, "id")
+
+	cycle, err := h.Queries.GetCycleInWorkspace(r.Context(), db.GetCycleInWorkspaceParams{
+		ID: parseUUID(id), WorkspaceID: parseUUID(workspaceID),
+	})
+	if err != nil {
+		writeError(w, http.StatusNotFound, "cycle not found")
+		return
+	}
+
+	issues, err := h.Queries.ListIssuesByCycle(r.Context(), cycle.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list cycle issues")
+		return
+	}
+
+	prefixMap := h.teamPrefixMap(r.Context(), cycle.WorkspaceID)
+	resp := make([]IssueResponse, len(issues))
+	for i, iss := range issues {
+		resp[i] = issueToResponse(iss, prefixMap[uuidToString(iss.TeamID)])
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"issues": resp})
+}
+
 func (h *Handler) GetActiveCycle(w http.ResponseWriter, r *http.Request) {
 	teamID := chi.URLParam(r, "teamId")
 

@@ -116,6 +116,14 @@ export function useCreateIssue() {
         if (!cache) continue;
         qc.setQueryData<ListIssuesCache>(key, addIssueToBuckets(cache, newIssue));
       }
+      // Push into the cycle's issues cache when assigned to one.
+      if (newIssue.cycle_id) {
+        qc.setQueryData<Issue[]>(cycleKeys.issues(wsId, newIssue.cycle_id), (old) => {
+          if (!old) return old;
+          if (old.some((i) => i.id === newIssue.id)) return old;
+          return [...old, newIssue];
+        });
+      }
       // Surface the just-created issue in cmd+k's Recent list without
       // requiring the user to open it first.
       useRecentIssuesStore.getState().recordVisit(newIssue.id);
@@ -146,6 +154,7 @@ export function useUpdateIssue() {
       // before the optimistic update lands.
       // Cancel and patch ALL issue list caches (workspace-wide + team-filtered).
       qc.cancelQueries({ queryKey: issueKeys.list(wsId) });
+      qc.cancelQueries({ queryKey: cycleKeys.issuesAll(wsId) });
       const prevList = qc.getQueryData<ListIssuesCache>(issueKeys.list(wsId));
       const prevDetail = qc.getQueryData<Issue>(issueKeys.detail(wsId, id));
 
@@ -170,6 +179,16 @@ export function useUpdateIssue() {
         qc.setQueryData<ListIssuesCache>(key, patchIssueInBuckets(cache, id, data));
       }
 
+      // Patch every active cycle issues cache that contains this issue.
+      const cycleIssueCaches = qc.getQueriesData<Issue[]>({ queryKey: cycleKeys.issuesAll(wsId) });
+      const prevCycleIssues = new Map<string, Issue[]>();
+      for (const [key, cache] of cycleIssueCaches) {
+        if (!cache) continue;
+        const keyStr = JSON.stringify(key);
+        prevCycleIssues.set(keyStr, cache);
+        qc.setQueryData<Issue[]>(key, cache.map((i) => (i.id === id ? { ...i, ...data } : i)));
+      }
+
       qc.setQueryData<Issue>(issueKeys.detail(wsId, id), (old) =>
         old ? { ...old, ...data } : old,
       );
@@ -180,11 +199,16 @@ export function useUpdateIssue() {
             old?.map((c) => (c.id === id ? { ...c, ...data } : c)),
         );
       }
-      return { prevLists, prevDetail, prevChildren, parentId, id };
+      return { prevLists, prevCycleIssues, prevDetail, prevChildren, parentId, id };
     },
     onError: (_err, _vars, ctx) => {
       if (ctx?.prevLists) {
         for (const [keyStr, cache] of ctx.prevLists) {
+          qc.setQueryData(JSON.parse(keyStr), cache);
+        }
+      }
+      if (ctx?.prevCycleIssues) {
+        for (const [keyStr, cache] of ctx.prevCycleIssues) {
           qc.setQueryData(JSON.parse(keyStr), cache);
         }
       }
@@ -228,6 +252,7 @@ export function useDeleteIssue() {
     mutationFn: (id: string) => api.deleteIssue(id),
     onMutate: async (id) => {
       await qc.cancelQueries({ queryKey: issueKeys.list(wsId) });
+      await qc.cancelQueries({ queryKey: cycleKeys.issuesAll(wsId) });
       const listCaches = qc.getQueriesData<ListIssuesCache>({ queryKey: issueKeys.list(wsId) });
       const prevLists = new Map<string, ListIssuesCache>();
       let parentIssueId: string | undefined;
@@ -240,12 +265,24 @@ export function useDeleteIssue() {
         }
         qc.setQueryData<ListIssuesCache>(key, removeIssueFromBuckets(cache, id));
       }
+      const cycleIssueCaches = qc.getQueriesData<Issue[]>({ queryKey: cycleKeys.issuesAll(wsId) });
+      const prevCycleIssues = new Map<string, Issue[]>();
+      for (const [key, cache] of cycleIssueCaches) {
+        if (!cache) continue;
+        prevCycleIssues.set(JSON.stringify(key), cache);
+        qc.setQueryData<Issue[]>(key, cache.filter((i) => i.id !== id));
+      }
       qc.removeQueries({ queryKey: issueKeys.detail(wsId, id) });
-      return { prevLists, parentIssueId };
+      return { prevLists, prevCycleIssues, parentIssueId };
     },
     onError: (_err, _id, ctx) => {
       if (ctx?.prevLists) {
         for (const [keyStr, cache] of ctx.prevLists) {
+          qc.setQueryData(JSON.parse(keyStr), cache);
+        }
+      }
+      if (ctx?.prevCycleIssues) {
+        for (const [keyStr, cache] of ctx.prevCycleIssues) {
           qc.setQueryData(JSON.parse(keyStr), cache);
         }
       }
@@ -275,6 +312,7 @@ export function useBatchUpdateIssues() {
     }) => api.batchUpdateIssues(ids, updates),
     onMutate: async ({ ids, updates }) => {
       await qc.cancelQueries({ queryKey: issueKeys.list(wsId) });
+      await qc.cancelQueries({ queryKey: cycleKeys.issuesAll(wsId) });
       const prevList = qc.getQueryData<ListIssuesCache>(issueKeys.list(wsId));
       qc.setQueryData<ListIssuesCache>(issueKeys.list(wsId), (old) => {
         if (!old) return old;
@@ -282,10 +320,26 @@ export function useBatchUpdateIssues() {
         for (const id of ids) next = patchIssueInBuckets(next, id, updates);
         return next;
       });
-      return { prevList };
+      const idSet = new Set(ids);
+      const cycleIssueCaches = qc.getQueriesData<Issue[]>({ queryKey: cycleKeys.issuesAll(wsId) });
+      const prevCycleIssues = new Map<string, Issue[]>();
+      for (const [key, cache] of cycleIssueCaches) {
+        if (!cache) continue;
+        prevCycleIssues.set(JSON.stringify(key), cache);
+        qc.setQueryData<Issue[]>(
+          key,
+          cache.map((i) => (idSet.has(i.id) ? { ...i, ...updates } : i)),
+        );
+      }
+      return { prevList, prevCycleIssues };
     },
     onError: (_err, _vars, ctx) => {
       if (ctx?.prevList) qc.setQueryData(issueKeys.list(wsId), ctx.prevList);
+      if (ctx?.prevCycleIssues) {
+        for (const [keyStr, cache] of ctx.prevCycleIssues) {
+          qc.setQueryData(JSON.parse(keyStr), cache);
+        }
+      }
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: issueKeys.list(wsId) });
@@ -302,6 +356,7 @@ export function useBatchDeleteIssues() {
     mutationFn: (ids: string[]) => api.batchDeleteIssues(ids),
     onMutate: async (ids) => {
       await qc.cancelQueries({ queryKey: issueKeys.list(wsId) });
+      await qc.cancelQueries({ queryKey: cycleKeys.issuesAll(wsId) });
       const prevList = qc.getQueryData<ListIssuesCache>(issueKeys.list(wsId));
       const parentIssueIds = new Set<string>();
       if (prevList) {
@@ -316,10 +371,23 @@ export function useBatchDeleteIssues() {
         for (const id of ids) next = removeIssueFromBuckets(next, id);
         return next;
       });
-      return { prevList, parentIssueIds };
+      const idSet = new Set(ids);
+      const cycleIssueCaches = qc.getQueriesData<Issue[]>({ queryKey: cycleKeys.issuesAll(wsId) });
+      const prevCycleIssues = new Map<string, Issue[]>();
+      for (const [key, cache] of cycleIssueCaches) {
+        if (!cache) continue;
+        prevCycleIssues.set(JSON.stringify(key), cache);
+        qc.setQueryData<Issue[]>(key, cache.filter((i) => !idSet.has(i.id)));
+      }
+      return { prevList, prevCycleIssues, parentIssueIds };
     },
     onError: (_err, _ids, ctx) => {
       if (ctx?.prevList) qc.setQueryData(issueKeys.list(wsId), ctx.prevList);
+      if (ctx?.prevCycleIssues) {
+        for (const [keyStr, cache] of ctx.prevCycleIssues) {
+          qc.setQueryData(JSON.parse(keyStr), cache);
+        }
+      }
     },
     onSettled: (_data, _err, _ids, ctx) => {
       qc.invalidateQueries({ queryKey: issueKeys.list(wsId) });
