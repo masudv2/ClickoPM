@@ -7,12 +7,14 @@ import type { AnimateLayoutChanges } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { toast } from "sonner";
 import type { Issue, UpdateIssueRequest } from "@multica/core/types";
-import { CalendarDays, Timer } from "lucide-react";
+import { CalendarDays, Timer, CornerDownRight } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@multica/ui/components/ui/tooltip";
 import { ActorAvatar } from "../../common/actor-avatar";
 import { useUpdateIssue } from "@multica/core/issues/mutations";
 import { useWorkspacePaths } from "@multica/core/paths";
 import { useWorkspaceId } from "@multica/core/hooks";
+import { useNavigation } from "../../navigation";
 import { projectListOptions } from "@multica/core/projects/queries";
 import { PriorityIcon } from "./priority-icon";
 import { PriorityPicker, AssigneePicker, DueDatePicker } from "./pickers";
@@ -80,6 +82,9 @@ export const BoardCardContent = memo(function BoardCardContent({
   const showCycle = storeProperties.cycle && issue.cycle_id;
   const showProject = storeProperties.project && project;
   const showChildProgress = storeProperties.childProgress && childProgress;
+  const showParent = !!issue.parent_issue_id && (issue.parent_title || issue.parent_identifier);
+  const p = useWorkspacePaths();
+  const navigation = useNavigation();
 
   return (
     <div className="rounded-lg border-[0.5px] border-border bg-card py-3 px-2.5 shadow-[0_3px_6px_-2px_rgba(0,0,0,0.02),0_1px_1px_0_rgba(0,0,0,0.04)] transition-colors group-hover/card:border-accent group-hover/card:bg-accent group-data-[popup-open]/card:border-accent group-data-[popup-open]/card:bg-accent">
@@ -91,8 +96,8 @@ export const BoardCardContent = memo(function BoardCardContent({
         {issue.title}
       </p>
 
-      {/* Sub-issue progress + cycle + project */}
-      {(showChildProgress || showCycle || showProject) && (
+      {/* Sub-issue progress + cycle + parent + project */}
+      {(showChildProgress || showCycle || showParent || showProject) && (
         <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
           {showChildProgress && (
             <div className="inline-flex items-center gap-1 rounded-full bg-muted/60 px-1.5 py-0.5">
@@ -117,6 +122,32 @@ export const BoardCardContent = memo(function BoardCardContent({
                 <span className="truncate">Cycle</span>
               </span>
             )
+          )}
+          {showParent && (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <span
+                    role="link"
+                    tabIndex={0}
+                    className="inline-flex cursor-pointer items-center gap-1 rounded-full bg-muted/60 px-1.5 py-0.5 text-[11px] text-muted-foreground max-w-[140px] hover:text-foreground"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      navigation.push(p.issueDetail(issue.parent_issue_id!));
+                    }}
+                  >
+                    <CornerDownRight className="size-3 shrink-0" aria-hidden="true" />
+                    <span className="truncate">{issue.parent_title ?? issue.parent_identifier}</span>
+                  </span>
+                }
+              />
+              <TooltipContent>
+                {issue.parent_identifier && issue.parent_title
+                  ? `${issue.parent_identifier} · ${issue.parent_title}`
+                  : (issue.parent_identifier ?? issue.parent_title)}
+              </TooltipContent>
+            </Tooltip>
           )}
           {showProject && (
             <span className="inline-flex items-center gap-1 rounded-full bg-muted/60 px-1.5 py-0.5 text-[11px] text-muted-foreground max-w-[160px]">

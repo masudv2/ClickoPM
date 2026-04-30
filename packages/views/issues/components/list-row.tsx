@@ -2,7 +2,10 @@
 
 import { memo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { CornerDownRight } from "lucide-react";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@multica/ui/components/ui/tooltip";
 import { AppLink } from "../../navigation";
+import { useNavigation } from "../../navigation";
 import type { Issue } from "@multica/core/types";
 import { ActorAvatar } from "../../common/actor-avatar";
 import { useIssueSelectionStore } from "@multica/core/issues/stores/selection-store";
@@ -37,6 +40,7 @@ export const ListRow = memo(function ListRow({
   const selected = useIssueSelectionStore((s) => s.selectedIds.has(issue.id));
   const toggle = useIssueSelectionStore((s) => s.toggle);
   const p = useWorkspacePaths();
+  const navigation = useNavigation();
   const storeProperties = useViewStore((s) => s.cardProperties);
   const wsId = useWorkspaceId();
   const { data: projects = [] } = useQuery({
@@ -49,6 +53,7 @@ export const ListRow = memo(function ListRow({
   const showChildProgress = storeProperties.childProgress && childProgress;
   const showAssignee = storeProperties.assignee && issue.assignee_type && issue.assignee_id;
   const showDueDate = storeProperties.dueDate && issue.due_date;
+  const showParent = !!issue.parent_issue_id && (issue.parent_title || issue.parent_identifier);
 
   return (
     <IssueActionsContextMenu issue={issue}>
@@ -98,6 +103,32 @@ export const ListRow = memo(function ListRow({
                 <span className="text-[11px] text-muted-foreground">+{issue.labels.length - 3}</span>
               )}
             </span>
+          )}
+          {showParent && (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <span
+                    role="link"
+                    tabIndex={0}
+                    className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded text-xs text-muted-foreground max-w-[160px] hover:text-foreground"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      navigation.push(p.issueDetail(issue.parent_issue_id!));
+                    }}
+                  >
+                    <CornerDownRight className="size-3.5 shrink-0" aria-hidden="true" />
+                    <span className="truncate">{issue.parent_title ?? issue.parent_identifier}</span>
+                  </span>
+                }
+              />
+              <TooltipContent>
+                {issue.parent_identifier && issue.parent_title
+                  ? `${issue.parent_identifier} · ${issue.parent_title}`
+                  : (issue.parent_identifier ?? issue.parent_title)}
+              </TooltipContent>
+            </Tooltip>
           )}
           {showProject && (
             <span className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground max-w-[140px]">

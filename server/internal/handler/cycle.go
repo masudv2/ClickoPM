@@ -355,6 +355,7 @@ func (h *Handler) ListCycleIssues(w http.ResponseWriter, r *http.Request) {
 	for i, iss := range issues {
 		resp[i] = issueToResponse(iss, prefixMap[uuidToString(iss.TeamID)])
 	}
+	h.enrichWithParents(r.Context(), resp, prefixMap)
 	writeJSON(w, http.StatusOK, map[string]any{"issues": resp})
 }
 

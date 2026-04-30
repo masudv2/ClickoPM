@@ -37,6 +37,8 @@ export interface Issue {
   creator_type: IssueAssigneeType;
   creator_id: string;
   parent_issue_id: string | null;
+  parent_identifier?: string;
+  parent_title?: string;
   project_id: string | null;
   cycle_id: string | null;
   estimate: number | null;

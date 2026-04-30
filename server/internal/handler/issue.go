@@ -47,6 +47,8 @@ type IssueResponse struct {
 	CycleID            *string                 `json:"cycle_id"`
 	Estimate           *int32                  `json:"estimate"`
 	StartDate          *string                 `json:"start_date"`
+	ParentIdentifier   *string                 `json:"parent_identifier,omitempty"`
+	ParentTitle        *string                 `json:"parent_title,omitempty"`
 }
 
 func issueToResponse(i db.Issue, issuePrefix string) IssueResponse {
@@ -75,6 +77,70 @@ func issueToResponse(i db.Issue, issuePrefix string) IssueResponse {
 		Estimate:      nullInt32Ptr(i.Estimate),
 		StartDate:     dateToPtr(i.StartDate),
 	}
+}
+
+// enrichWithParents fills ParentIdentifier and ParentTitle on every response
+// whose ParentIssueID is set, in a single batch query. prefixMap MUST cover
+// every team in the workspace (use teamPrefixMap on the issue's workspace).
+// Falls back silently when the parent row is missing or the lookup errors.
+func (h *Handler) enrichWithParents(ctx context.Context, responses []IssueResponse, prefixMap map[string]string) {
+	if len(responses) == 0 {
+		return
+	}
+	seen := map[string]bool{}
+	ids := make([]pgtype.UUID, 0, len(responses))
+	for _, r := range responses {
+		if r.ParentIssueID == nil || seen[*r.ParentIssueID] {
+			continue
+		}
+		seen[*r.ParentIssueID] = true
+		ids = append(ids, parseUUID(*r.ParentIssueID))
+	}
+	if len(ids) == 0 {
+		return
+	}
+	parents, err := h.Queries.GetIssueParentSummaries(ctx, ids)
+	if err != nil {
+		return
+	}
+	type parentInfo struct{ identifier, title string }
+	byID := make(map[string]parentInfo, len(parents))
+	for _, p := range parents {
+		prefix := prefixMap[uuidToString(p.TeamID)]
+		byID[uuidToString(p.ID)] = parentInfo{
+			identifier: prefix + "-" + strconv.Itoa(int(p.Number)),
+			title:      p.Title,
+		}
+	}
+	for i := range responses {
+		if responses[i].ParentIssueID == nil {
+			continue
+		}
+		if info, ok := byID[*responses[i].ParentIssueID]; ok {
+			ident, title := info.identifier, info.title
+			responses[i].ParentIdentifier = &ident
+			responses[i].ParentTitle = &title
+		}
+	}
+}
+
+// enrichSingleWithParent fills ParentIdentifier and ParentTitle on a single
+// response when ParentIssueID is set. Issues each parent's team prefix one
+// at a time — for batch enrichment use enrichWithParents instead.
+func (h *Handler) enrichSingleWithParent(ctx context.Context, resp *IssueResponse) {
+	if resp == nil || resp.ParentIssueID == nil {
+		return
+	}
+	parents, err := h.Queries.GetIssueParentSummaries(ctx, []pgtype.UUID{parseUUID(*resp.ParentIssueID)})
+	if err != nil || len(parents) == 0 {
+		return
+	}
+	p := parents[0]
+	prefix := h.getTeamIssuePrefix(ctx, p.TeamID)
+	ident := prefix + "-" + strconv.Itoa(int(p.Number))
+	title := p.Title
+	resp.ParentIdentifier = &ident
+	resp.ParentTitle = &title
 }
 
 func nullInt32Ptr(v pgtype.Int4) *int32 {
@@ -560,9 +626,12 @@ func (h *Handler) SearchIssues(w http.ResponseWriter, r *http.Request) {
 
 	searchPrefixMap := h.teamPrefixMap(ctx, wsUUID)
 	resp := make([]SearchIssueResponse, len(results))
+	innerForEnrich := make([]IssueResponse, len(results))
 	for i, sr := range results {
+		ir := issueToResponse(sr.issue, searchPrefixMap[uuidToString(sr.issue.TeamID)])
+		innerForEnrich[i] = ir
 		sir := SearchIssueResponse{
-			IssueResponse: issueToResponse(sr.issue, searchPrefixMap[uuidToString(sr.issue.TeamID)]),
+			IssueResponse: ir,
 			MatchSource:   sr.matchSource,
 		}
 		if sr.matchSource == "comment" && sr.matchedCommentContent != "" {
@@ -570,6 +639,11 @@ func (h *Handler) SearchIssues(w http.ResponseWriter, r *http.Request) {
 			sir.MatchedSnippet = &snippet
 		}
 		resp[i] = sir
+	}
+	h.enrichWithParents(ctx, innerForEnrich, searchPrefixMap)
+	for i := range resp {
+		resp[i].ParentIdentifier = innerForEnrich[i].ParentIdentifier
+		resp[i].ParentTitle = innerForEnrich[i].ParentTitle
 	}
 
 	w.Header().Set("X-Total-Count", strconv.FormatInt(total, 10))
@@ -756,6 +830,8 @@ func (h *Handler) ListIssues(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	h.enrichWithParents(ctx, resp, prefixMap)
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"issues": resp,
 		"total":  total,
@@ -801,6 +877,8 @@ func (h *Handler) GetIssue(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	h.enrichSingleWithParent(r.Context(), &resp)
+
 	writeJSON(w, http.StatusOK, resp)
 }
 
@@ -820,6 +898,7 @@ func (h *Handler) ListChildIssues(w http.ResponseWriter, r *http.Request) {
 	for i, child := range children {
 		resp[i] = issueToResponse(child, childPrefixMap[uuidToString(child.TeamID)])
 	}
+	h.enrichWithParents(r.Context(), resp, childPrefixMap)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"issues": resp,
 	})
@@ -1031,6 +1110,7 @@ func (h *Handler) CreateIssue(w http.ResponseWriter, r *http.Request) {
 
 	prefix := h.getTeamIssuePrefix(r.Context(), issue.TeamID)
 	resp := issueToResponse(issue, prefix)
+	h.enrichSingleWithParent(r.Context(), &resp)
 
 	// Fetch linked attachments so they appear in the response.
 	if len(req.AttachmentIDs) > 0 {
@@ -1241,6 +1321,7 @@ func (h *Handler) UpdateIssue(w http.ResponseWriter, r *http.Request) {
 
 	prefix := h.getTeamIssuePrefix(r.Context(), issue.TeamID)
 	resp := issueToResponse(issue, prefix)
+	h.enrichSingleWithParent(r.Context(), &resp)
 	slog.Info("issue updated", append(logger.RequestAttrs(r), "issue_id", id, "workspace_id", workspaceID)...)
 
 	assigneeChanged := (req.AssigneeType != nil || req.AssigneeID != nil) &&
@@ -1624,6 +1705,7 @@ func (h *Handler) BatchUpdateIssues(w http.ResponseWriter, r *http.Request) {
 
 		prefix := h.getTeamIssuePrefix(r.Context(), issue.TeamID)
 		resp := issueToResponse(issue, prefix)
+		h.enrichSingleWithParent(r.Context(), &resp)
 		actorType, actorID := h.resolveActor(r, userID, workspaceID)
 
 		assigneeChanged := (req.Updates.AssigneeType != nil || req.Updates.AssigneeID != nil) &&

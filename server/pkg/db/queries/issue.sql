@@ -110,6 +110,12 @@ SELECT * FROM issue
 WHERE parent_issue_id = $1
 ORDER BY position ASC, created_at DESC;
 
+-- name: GetIssueParentSummaries :many
+-- Minimal projection for enriching child issues with their parent's
+-- identifier and title (used by the list/board parent chip).
+SELECT id, team_id, number, title FROM issue
+WHERE id = ANY($1::uuid[]);
+
 -- name: CountCreatedIssueAssignees :many
 -- Count assignees on issues created by a specific user.
 SELECT

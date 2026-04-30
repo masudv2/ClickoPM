@@ -527,6 +527,45 @@ func (q *Queries) GetIssueInWorkspace(ctx context.Context, arg GetIssueInWorkspa
 	return i, err
 }
 
+const getIssueParentSummaries = `-- name: GetIssueParentSummaries :many
+SELECT id, team_id, number, title FROM issue
+WHERE id = ANY($1::uuid[])
+`
+
+type GetIssueParentSummariesRow struct {
+	ID     pgtype.UUID `json:"id"`
+	TeamID pgtype.UUID `json:"team_id"`
+	Number int32       `json:"number"`
+	Title  string      `json:"title"`
+}
+
+// Minimal projection for enriching child issues with their parent's
+// identifier and title (used by the list/board parent chip).
+func (q *Queries) GetIssueParentSummaries(ctx context.Context, dollar_1 []pgtype.UUID) ([]GetIssueParentSummariesRow, error) {
+	rows, err := q.db.Query(ctx, getIssueParentSummaries, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetIssueParentSummariesRow{}
+	for rows.Next() {
+		var i GetIssueParentSummariesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TeamID,
+			&i.Number,
+			&i.Title,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getWorkloadByTeam = `-- name: GetWorkloadByTeam :many
 SELECT
   t.id AS team_id,
