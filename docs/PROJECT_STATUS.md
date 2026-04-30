@@ -175,6 +175,13 @@ Built in 4 phases:
 - Bug alerts for critical issues
 - Team settings tab for channel configuration
 
+### Cycles/Sprints (Active)
+- Cycle sweeper auto-creates, advances status, and snapshots history every 10 minutes
+- Team settings control: `duration_weeks`, `cooldown_weeks`, `auto_create_count`, `auto_add_started`, `auto_add_completed`
+- Frontend pages: cycles list, cycle detail (burndown chart, breakdown tabs, sidebar)
+- `feat/cycles` branch has in-progress frontend work (cycle pages, pickers, route wiring)
+- Issues can be added/removed from cycles; unfinished issues auto-move to next cycle
+
 ### Recent Changes (2026-04-29 to 2026-04-30)
 - Sidebar: projects under teams default to expanded, Briefcase icon
 - Invited users can signup when `ALLOW_SIGNUP=false`
@@ -184,6 +191,7 @@ Built in 4 phases:
 - CLI expanded with cycle, ticket, team, label, dashboard, workload, inbox commands
 - Labels created: Bug, Feature, Improvement, Documentation, Frontend, Backend, DevOps, Design, QA
 - Upload directory auto-created in Docker entrypoint
+- Cycles frontend: list page, detail page with burndown/breakdown, cycle batch picker
 
 ## Key Files
 
@@ -215,6 +223,27 @@ Built in 4 phases:
 - `docker/entrypoint.sh` — Container startup (migrations + upload dir)
 - `.env` — Local dev environment (not committed)
 - `fly.backend.toml` / `fly.web.toml` — Fly.io configs (not currently used)
+
+## In-Progress Branches
+
+| Branch | Status | Description |
+|--------|--------|-------------|
+| `feat/cycles` | Active | Frontend cycle pages, pickers, route wiring, burndown charts |
+
+## Design Specs
+
+All feature designs are in `docs/superpowers/specs/`:
+
+| Spec | Date | Status |
+|------|------|--------|
+| CEO Dashboard | 2026-04-27 | Implemented |
+| Cycles | 2026-04-27 | In progress (frontend) |
+| Issue Labels | 2026-04-27 | Implemented |
+| Teams | 2026-04-27 | Implemented |
+| Daily Reports (Slack) | 2026-04-28 | Implemented |
+| Cycle Capacity Planning | 2026-04-29 | In progress |
+| Ticketing Phase 2 (Portal) | 2026-04-29 | Implemented |
+| Ticketing System (Phase 1) | 2026-04-29 | Implemented |
 
 ## Getting Started on a New Machine
 

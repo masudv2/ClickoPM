@@ -345,3 +345,7 @@ All queries filter by `workspace_id`. Membership checks gate access. `X-Workspac
 ## Agent Assignees
 
 Assignees are polymorphic — can be a member or an agent. `assignee_type` + `assignee_id` on issues. Agents render with distinct styling (purple background, robot icon).
+
+## Project Status & Deployment
+
+Read `docs/PROJECT_STATUS.md` for full deployment context: Dokploy infrastructure, environment variables, access control, CLI setup, feature status, and getting started on a new machine. Read design specs in `docs/superpowers/specs/` for feature designs.
