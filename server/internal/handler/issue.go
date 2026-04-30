@@ -1591,6 +1591,20 @@ func (h *Handler) BatchUpdateIssues(w http.ResponseWriter, r *http.Request) {
 				params.ProjectID = pgtype.UUID{Valid: false}
 			}
 		}
+		if _, ok := rawUpdates["cycle_id"]; ok {
+			if req.Updates.CycleID != nil {
+				params.CycleID = parseUUID(*req.Updates.CycleID)
+			} else {
+				params.CycleID = pgtype.UUID{Valid: false}
+			}
+		}
+		if _, ok := rawUpdates["estimate"]; ok {
+			if req.Updates.Estimate != nil {
+				params.Estimate = pgtype.Int4{Int32: *req.Updates.Estimate, Valid: true}
+			} else {
+				params.Estimate = pgtype.Int4{Valid: false}
+			}
+		}
 
 		// Validate the resulting assignee pair when this batch update touches
 		// either assignee field. Skip the issue silently on failure.
