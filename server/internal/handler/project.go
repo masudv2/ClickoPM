@@ -30,6 +30,7 @@ type ProjectResponse struct {
 	LeadID      *string `json:"lead_id"`
 	StartDate   *string `json:"start_date"`
 	TargetDate  *string `json:"target_date"`
+	ArchivedAt  *string `json:"archived_at"`
 	CreatedAt   string  `json:"created_at"`
 	UpdatedAt   string  `json:"updated_at"`
 	IssueCount  int64   `json:"issue_count"`
@@ -50,6 +51,7 @@ func projectToResponse(p db.Project) ProjectResponse {
 		LeadID:      uuidToPtr(p.LeadID),
 		StartDate:   dateToPtr(p.StartDate),
 		TargetDate:  dateToPtr(p.TargetDate),
+		ArchivedAt:  timestampToPtr(p.ArchivedAt),
 		CreatedAt:   timestampToString(p.CreatedAt),
 		UpdatedAt:   timestampToString(p.UpdatedAt),
 	}
@@ -102,11 +104,16 @@ func (h *Handler) ListProjects(w http.ResponseWriter, r *http.Request) {
 	if t := r.URL.Query().Get("team_id"); t != "" {
 		teamFilter = parseUUID(t)
 	}
+	var includeArchived pgtype.Bool
+	if r.URL.Query().Get("include_archived") == "true" {
+		includeArchived = pgtype.Bool{Bool: true, Valid: true}
+	}
 	projects, err := h.Queries.ListProjects(r.Context(), db.ListProjectsParams{
-		WorkspaceID: parseUUID(workspaceID),
-		Status:      statusFilter,
-		Priority:    priorityFilter,
-		TeamID:      teamFilter,
+		WorkspaceID:     parseUUID(workspaceID),
+		Status:          statusFilter,
+		Priority:        priorityFilter,
+		TeamID:          teamFilter,
+		IncludeArchived: includeArchived,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list projects")
@@ -328,6 +335,52 @@ func (h *Handler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 	}
 	h.publish(protocol.EventProjectDeleted, workspaceID, "member", userID, map[string]any{"project_id": id})
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) ArchiveProject(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	workspaceID := h.resolveWorkspaceID(r)
+	if _, err := h.Queries.GetProjectInWorkspace(r.Context(), db.GetProjectInWorkspaceParams{
+		ID: parseUUID(id), WorkspaceID: parseUUID(workspaceID),
+	}); err != nil {
+		writeError(w, http.StatusNotFound, "project not found")
+		return
+	}
+	userID, ok := requireUserID(w, r)
+	if !ok {
+		return
+	}
+	project, err := h.Queries.ArchiveProject(r.Context(), parseUUID(id))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to archive project")
+		return
+	}
+	resp := projectToResponse(project)
+	h.publish(protocol.EventProjectUpdated, workspaceID, "member", userID, map[string]any{"project": resp})
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) UnarchiveProject(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	workspaceID := h.resolveWorkspaceID(r)
+	if _, err := h.Queries.GetProjectInWorkspace(r.Context(), db.GetProjectInWorkspaceParams{
+		ID: parseUUID(id), WorkspaceID: parseUUID(workspaceID),
+	}); err != nil {
+		writeError(w, http.StatusNotFound, "project not found")
+		return
+	}
+	userID, ok := requireUserID(w, r)
+	if !ok {
+		return
+	}
+	project, err := h.Queries.UnarchiveProject(r.Context(), parseUUID(id))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to unarchive project")
+		return
+	}
+	resp := projectToResponse(project)
+	h.publish(protocol.EventProjectUpdated, workspaceID, "member", userID, map[string]any{"project": resp})
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // SearchProjectResponse extends ProjectResponse with search metadata.

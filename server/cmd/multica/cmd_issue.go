@@ -54,6 +54,20 @@ var issueAssignCmd = &cobra.Command{
 	RunE:  runIssueAssign,
 }
 
+var issueDeleteCmd = &cobra.Command{
+	Use:   "delete <id>",
+	Short: "Delete an issue (irreversible)",
+	Args:  exactArgs(1),
+	RunE:  runIssueDelete,
+}
+
+var issueBatchDeleteCmd = &cobra.Command{
+	Use:   "batch-delete <id> [<id>...]",
+	Short: "Delete multiple issues in a single call (irreversible)",
+	Args:  cobra.MinimumNArgs(1),
+	RunE:  runIssueBatchDelete,
+}
+
 var issueStatusCmd = &cobra.Command{
 	Use:   "status <id> <status>",
 	Short: "Change issue status",
@@ -158,6 +172,8 @@ func init() {
 	issueCmd.AddCommand(issueUpdateCmd)
 	issueCmd.AddCommand(issueAssignCmd)
 	issueCmd.AddCommand(issueStatusCmd)
+	issueCmd.AddCommand(issueDeleteCmd)
+	issueCmd.AddCommand(issueBatchDeleteCmd)
 	issueCmd.AddCommand(issueCommentCmd)
 	issueCmd.AddCommand(issueSubscriberCmd)
 	issueCmd.AddCommand(issueRunsCmd)
@@ -715,6 +731,36 @@ func runIssueAssign(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	return cli.PrintJSON(os.Stdout, result)
+}
+
+func runIssueDelete(cmd *cobra.Command, args []string) error {
+	client, err := newAPIClient(cmd)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if err := client.DeleteJSON(ctx, "/api/issues/"+args[0]); err != nil {
+		return fmt.Errorf("delete issue: %w", err)
+	}
+	fmt.Fprintf(os.Stderr, "Deleted issue %s\n", args[0])
+	return nil
+}
+
+func runIssueBatchDelete(cmd *cobra.Command, args []string) error {
+	client, err := newAPIClient(cmd)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	body := map[string]any{"issue_ids": args}
+	var result map[string]any
+	if err := client.PostJSON(ctx, "/api/issues/batch-delete", body, &result); err != nil {
+		return fmt.Errorf("batch-delete issues: %w", err)
+	}
+	fmt.Fprintf(os.Stderr, "Deleted %d issues\n", len(args))
+	return nil
 }
 
 func runIssueStatus(cmd *cobra.Command, args []string) error {

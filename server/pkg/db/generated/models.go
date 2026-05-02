@@ -410,6 +410,7 @@ type Project struct {
 	TeamID      pgtype.UUID        `json:"team_id"`
 	StartDate   pgtype.Date        `json:"start_date"`
 	TargetDate  pgtype.Date        `json:"target_date"`
+	ArchivedAt  pgtype.Timestamptz `json:"archived_at"`
 }
 
 type Skill struct {

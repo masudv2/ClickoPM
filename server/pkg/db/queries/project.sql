@@ -1,6 +1,7 @@
 -- name: ListProjects :many
 SELECT * FROM project
 WHERE workspace_id = $1
+  AND (sqlc.narg('include_archived')::boolean IS TRUE OR archived_at IS NULL)
   AND (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status'))
   AND (sqlc.narg('priority')::text IS NULL OR priority = sqlc.narg('priority'))
   AND (sqlc.narg('team_id')::uuid IS NULL OR team_id = sqlc.narg('team_id'))
@@ -40,6 +41,16 @@ RETURNING *;
 -- name: DeleteProject :exec
 DELETE FROM project WHERE id = $1;
 
+-- name: ArchiveProject :one
+UPDATE project SET archived_at = now(), updated_at = now()
+WHERE id = $1
+RETURNING *;
+
+-- name: UnarchiveProject :one
+UPDATE project SET archived_at = NULL, updated_at = now()
+WHERE id = $1
+RETURNING *;
+
 -- name: CountIssuesByProject :one
 SELECT count(*) FROM issue
 WHERE project_id = $1;
@@ -55,6 +66,7 @@ LEFT JOIN LATERAL (
     FROM issue i WHERE i.project_id = p.id
 ) s ON true
 WHERE p.workspace_id = $1
+  AND p.archived_at IS NULL
   AND p.status NOT IN ('completed', 'cancelled')
   AND (sqlc.narg('team_id')::uuid IS NULL OR p.team_id = sqlc.narg('team_id'))
 ORDER BY p.team_id, p.start_date NULLS LAST, p.created_at;

@@ -58,6 +58,20 @@ var projectStatusCmd = &cobra.Command{
 	RunE:  runProjectStatus,
 }
 
+var projectArchiveCmd = &cobra.Command{
+	Use:   "archive <id>",
+	Short: "Archive a project (hides from default lists; reversible via unarchive)",
+	Args:  exactArgs(1),
+	RunE:  runProjectArchive,
+}
+
+var projectUnarchiveCmd = &cobra.Command{
+	Use:   "unarchive <id>",
+	Short: "Unarchive a previously archived project",
+	Args:  exactArgs(1),
+	RunE:  runProjectUnarchive,
+}
+
 var validProjectStatuses = []string{
 	"planned", "in_progress", "paused", "completed", "cancelled",
 }
@@ -69,10 +83,13 @@ func init() {
 	projectCmd.AddCommand(projectUpdateCmd)
 	projectCmd.AddCommand(projectDeleteCmd)
 	projectCmd.AddCommand(projectStatusCmd)
+	projectCmd.AddCommand(projectArchiveCmd)
+	projectCmd.AddCommand(projectUnarchiveCmd)
 
 	// project list
 	projectListCmd.Flags().String("output", "table", "Output format: table or json")
 	projectListCmd.Flags().String("status", "", "Filter by status")
+	projectListCmd.Flags().Bool("include-archived", false, "Include archived projects (hidden by default)")
 
 	// project get
 	projectGetCmd.Flags().String("output", "json", "Output format: table or json")
@@ -126,6 +143,9 @@ func runProjectList(cmd *cobra.Command, _ []string) error {
 	}
 	if v, _ := cmd.Flags().GetString("status"); v != "" {
 		params.Set("status", v)
+	}
+	if includeArchived, _ := cmd.Flags().GetBool("include-archived"); includeArchived {
+		params.Set("include_archived", "true")
 	}
 
 	path := "/api/projects"
@@ -399,6 +419,36 @@ func runProjectStatus(cmd *cobra.Command, args []string) error {
 		return cli.PrintJSON(os.Stdout, result)
 	}
 	return nil
+}
+
+func runProjectArchive(cmd *cobra.Command, args []string) error {
+	client, err := newAPIClient(cmd)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	var result map[string]any
+	if err := client.PostJSON(ctx, "/api/projects/"+args[0]+"/archive", map[string]any{}, &result); err != nil {
+		return fmt.Errorf("archive project: %w", err)
+	}
+	fmt.Fprintf(os.Stderr, "Archived project %s\n", truncateID(args[0]))
+	return cli.PrintJSON(os.Stdout, result)
+}
+
+func runProjectUnarchive(cmd *cobra.Command, args []string) error {
+	client, err := newAPIClient(cmd)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	var result map[string]any
+	if err := client.PostJSON(ctx, "/api/projects/"+args[0]+"/unarchive", map[string]any{}, &result); err != nil {
+		return fmt.Errorf("unarchive project: %w", err)
+	}
+	fmt.Fprintf(os.Stderr, "Unarchived project %s\n", truncateID(args[0]))
+	return cli.PrintJSON(os.Stdout, result)
 }
 
 // ---------------------------------------------------------------------------
