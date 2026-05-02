@@ -215,13 +215,18 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
     projectViewStore.getState().setMilestoneFilters(id ? [id] : []);
   }, []);
 
-  // Seed milestone filter from URL ?milestone=ID on mount.
+  // Reset milestone filter whenever the project changes. projectViewStore is a
+  // singleton (persisted) so a filter set in project A would silently hide all
+  // issues in project B (whose milestone IDs don't match). Seeding from URL
+  // happens in the same effect so we land in the right state in one tick.
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    const id = params.get("milestone");
-    if (id) setMilestoneFilter(id);
-  }, [setMilestoneFilter]);
+    let nextId: string | null = null;
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      nextId = params.get("milestone");
+    }
+    setMilestoneFilter(nextId);
+  }, [projectId, setMilestoneFilter]);
   const projectScope = `project:${projectId}`;
   const projectFilter = useMemo<MyIssuesFilter>(
     () => ({ project_id: projectId }),

@@ -1594,6 +1594,13 @@ func (h *Handler) DeleteIssue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Drop any pins pointing at this issue so clients don't 404 on the
+	// next pin-list refresh. Best-effort; pin schema does not cascade.
+	h.Queries.DeletePinnedItemsByItem(r.Context(), db.DeletePinnedItemsByItemParams{
+		ItemType: "issue",
+		ItemID:   issue.ID,
+	})
+
 	h.deleteS3Objects(r.Context(), attachmentURLs)
 	userID := requestUserID(r)
 	actorType, actorID := h.resolveActor(r, userID, uuidToString(issue.WorkspaceID))
@@ -1881,6 +1888,11 @@ func (h *Handler) BatchDeleteIssues(w http.ResponseWriter, r *http.Request) {
 			slog.Warn("batch delete issue failed", "issue_id", issueID, "error", err)
 			continue
 		}
+
+		h.Queries.DeletePinnedItemsByItem(r.Context(), db.DeletePinnedItemsByItemParams{
+			ItemType: "issue",
+			ItemID:   issue.ID,
+		})
 
 		h.deleteS3Objects(r.Context(), attachmentURLs)
 

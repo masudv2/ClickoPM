@@ -333,6 +333,11 @@ func (h *Handler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to delete project")
 		return
 	}
+	// Drop any pins pointing at this project; pin schema does not cascade.
+	h.Queries.DeletePinnedItemsByItem(r.Context(), db.DeletePinnedItemsByItemParams{
+		ItemType: "project",
+		ItemID:   parseUUID(id),
+	})
 	h.publish(protocol.EventProjectDeleted, workspaceID, "member", userID, map[string]any{"project_id": id})
 	w.WriteHeader(http.StatusNoContent)
 }

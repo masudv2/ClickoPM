@@ -81,11 +81,11 @@ function generateTimelineColumns(start: Date, end: Date, zoom: ZoomLevel): { dat
   if (zoom === "day") {
     while (current <= end) {
       const isToday = current.toDateString() === now.toDateString();
+      const dayName = current.toLocaleDateString("en-US", { weekday: "short" });
+      const monthLabel = current.toLocaleDateString("en-US", { month: "short", day: "numeric" });
       cols.push({
         date: new Date(current),
-        label: current.getDate() === 1
-          ? current.toLocaleDateString("en-US", { month: "short", day: "numeric" })
-          : String(current.getDate()),
+        label: current.getDate() === 1 ? `${dayName} · ${monthLabel}` : `${dayName} ${current.getDate()}`,
         isHighlight: isToday,
       });
       current.setDate(current.getDate() + 1);
@@ -139,7 +139,7 @@ function getColumnWidth(col: { date: Date }, nextCol: { date: Date } | undefined
 type DragState = {
   type: "move" | "resize-left" | "resize-right";
   id: string;
-  kind: "project" | "issue";
+  kind: "project" | "issue" | "milestone";
   origStart: Date;
   origEnd: Date;
   startX: number;
@@ -149,7 +149,7 @@ type DragState = {
 
 function useDragBar(
   pxPerDay: number,
-  onComplete: (id: string, kind: "project" | "issue", newStart: Date, newEnd: Date) => void,
+  onComplete: (id: string, kind: "project" | "issue" | "milestone", newStart: Date, newEnd: Date) => void,
 ) {
   const [drag, setDrag] = useState<DragState | null>(null);
   const dragRef = useRef<DragState | null>(null);
@@ -160,7 +160,7 @@ function useDragBar(
     (
       e: React.MouseEvent,
       id: string,
-      kind: "project" | "issue",
+      kind: "project" | "issue" | "milestone",
       type: DragState["type"],
       start: Date,
       end: Date,
@@ -247,7 +247,7 @@ function ProjectBar({
   project: RoadmapProject; pxPerDay: number; timelineStart: Date;
   onClick: () => void;
   drag: DragState | null;
-  onDragStart: (e: React.MouseEvent, id: string, kind: "project" | "issue", type: DragState["type"], start: Date, end: Date) => void;
+  onDragStart: (e: React.MouseEvent, id: string, kind: "project" | "issue" | "milestone", type: DragState["type"], start: Date, end: Date) => void;
   members: Record<string, { name: string; avatar_url: string | null }>;
   didDragRef: React.RefObject<boolean>;
 }) {
@@ -344,33 +344,55 @@ function ProjectBar({
 }
 
 function MilestoneBar({
-  milestone, pxPerDay, timelineStart, onClick,
+  milestone, pxPerDay, timelineStart, drag, onDragStart, didDragRef, onClick,
 }: {
   milestone: Milestone;
   pxPerDay: number;
   timelineStart: Date;
+  drag: DragState | null;
+  onDragStart: (e: React.MouseEvent, id: string, kind: "project" | "issue" | "milestone", type: DragState["type"], start: Date, end: Date) => void;
+  didDragRef: React.RefObject<boolean>;
   onClick?: () => void;
 }) {
   const start = milestone.start_date ? new Date(milestone.start_date) : null;
   const end = milestone.target_date ? new Date(milestone.target_date) : null;
   if (!start && !end) return <div style={{ height: DETAIL_ROW_HEIGHT }} />;
 
+  const isDragging = drag?.id === milestone.id && drag.kind === "milestone";
   const origStart = start ?? new Date(end!.getTime() - 14 * 86400000);
   const origEnd = end ?? new Date(origStart.getTime() + 14 * 86400000);
 
-  const left = daysBetween(timelineStart, origStart) * pxPerDay;
-  const width = Math.max(daysBetween(origStart, origEnd) * pxPerDay, 20);
+  const curStart = isDragging ? drag.currentStart : origStart;
+  const curEnd = isDragging ? drag.currentEnd : origEnd;
+  const left = daysBetween(timelineStart, curStart) * pxPerDay;
+  const width = Math.max(daysBetween(curStart, curEnd) * pxPerDay, 20);
 
   return (
     <div style={{ height: DETAIL_ROW_HEIGHT }} className="relative flex items-center">
       <div
-        onClick={onClick}
-        className="absolute h-6 rounded flex items-center gap-1.5 px-2 cursor-pointer bg-primary/15 border border-primary/40 hover:bg-primary/25 transition-colors"
+        onClick={() => { if (!didDragRef.current && onClick) onClick(); }}
+        className={cn(
+          "absolute h-6 rounded flex items-center gap-1.5 px-2 group/bar bg-primary/15 border border-primary/40 hover:bg-primary/25 transition-colors",
+          isDragging && "opacity-80 ring-2 ring-primary/50",
+        )}
         style={{ left: Math.max(left, 0), width: Math.max(width, 20) }}
       >
-        <Diamond className="size-3 text-primary shrink-0" />
-        <span className="text-[11px] truncate text-foreground/80">{milestone.name}</span>
-        <span className="ml-auto text-[10px] text-muted-foreground tabular-nums shrink-0">{milestone.percent}%</span>
+        <div
+          className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize z-20 opacity-0 group-hover/bar:opacity-100 hover:bg-white/20 rounded-l"
+          onMouseDown={(e) => onDragStart(e, milestone.id, "milestone", "resize-left", origStart, origEnd)}
+        />
+        <Diamond className="size-3 text-primary shrink-0 pointer-events-none" />
+        <span
+          className="text-[11px] truncate text-foreground/80 flex-1 cursor-grab active:cursor-grabbing"
+          onMouseDown={(e) => onDragStart(e, milestone.id, "milestone", "move", origStart, origEnd)}
+        >
+          {milestone.name}
+        </span>
+        <span className="ml-auto text-[10px] text-muted-foreground tabular-nums shrink-0 pointer-events-none">{milestone.percent}%</span>
+        <div
+          className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize z-20 opacity-0 group-hover/bar:opacity-100 hover:bg-white/20 rounded-r"
+          onMouseDown={(e) => onDragStart(e, milestone.id, "milestone", "resize-right", origStart, origEnd)}
+        />
       </div>
     </div>
   );
@@ -382,7 +404,7 @@ function IssueBar({
   issue: Issue; pxPerDay: number; timelineStart: Date;
   members: Record<string, { name: string; avatar_url: string | null }>;
   drag: DragState | null;
-  onDragStart: (e: React.MouseEvent, id: string, kind: "project" | "issue", type: DragState["type"], start: Date, end: Date) => void;
+  onDragStart: (e: React.MouseEvent, id: string, kind: "project" | "issue" | "milestone", type: DragState["type"], start: Date, end: Date) => void;
   didDragRef: React.RefObject<boolean>;
   onClick?: () => void;
 }) {
@@ -596,13 +618,38 @@ export function RoadmapPage() {
     },
   });
 
+  const updateMilestoneMut = useMutation({
+    mutationFn: ({ id, start_date, target_date }: { id: string; start_date?: string; target_date?: string }) =>
+      api.updateMilestone(id, { start_date, target_date }),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ["milestones", wsId] });
+    },
+  });
+
   const handleDragComplete = useCallback(
-    (id: string, kind: "project" | "issue", newStart: Date, newEnd: Date) => {
+    (id: string, kind: "project" | "issue" | "milestone", newStart: Date, newEnd: Date) => {
       if (kind === "project") {
         updateProjectMut.mutate({
           id,
           start_date: formatDateForApi(newStart),
           target_date: formatDateForApi(newEnd),
+        });
+      } else if (kind === "milestone") {
+        // Clamp to the project window when present.
+        let s = newStart, e = newEnd;
+        if (selectedProject?.start_date) {
+          const ps = new Date(selectedProject.start_date);
+          if (s < ps) s = ps;
+        }
+        if (selectedProject?.target_date) {
+          const pe = new Date(selectedProject.target_date);
+          if (e > pe) e = pe;
+        }
+        if (s >= e) e = new Date(s.getTime() + 86400000);
+        updateMilestoneMut.mutate({
+          id,
+          start_date: formatDateForApi(s),
+          target_date: formatDateForApi(e),
         });
       } else {
         updateIssueMut.mutate({
@@ -612,7 +659,7 @@ export function RoadmapPage() {
         });
       }
     },
-    [updateProjectMut, updateIssueMut],
+    [updateProjectMut, updateIssueMut, updateMilestoneMut, selectedProject],
   );
 
   const teamMap = useMemo(() => {
@@ -749,7 +796,11 @@ export function RoadmapPage() {
                 ? `${milestoneIssues.length} Issues`
                 : `${projectMilestones.length} Milestones`}
             </div>
+            {/* Spacer rows aligning with the project (and milestone) header bars in the timeline */}
             <div className="border-b border-border/30 bg-muted/10" style={{ height: ROW_HEIGHT }} />
+            {showingIssues && (
+              <div className="border-b border-border/20 bg-muted/5" style={{ height: DETAIL_ROW_HEIGHT }} />
+            )}
             {showingIssues
               ? milestoneIssues.map((issue) => {
                   const isDone = issue.status === "done" || issue.status === "cancelled";
@@ -813,10 +864,26 @@ export function RoadmapPage() {
             <TimelineHeader columns={columns} timelineStart={timelineStart} timelineEnd={timelineEnd} pxPerDay={pxPerDay} zoom={zoom} />
             <div className="relative" style={{ width: totalWidth, minHeight: "100%" }}>
               <TodayLine timelineStart={timelineStart} pxPerDay={pxPerDay} totalDays={totalDays} />
-              {/* Project (or milestone) header bar */}
+              {/* Project header bar (always shown) */}
               <div className="border-b border-border/30">
                 <ProjectBar project={selectedProject} pxPerDay={pxPerDay} timelineStart={timelineStart} onClick={() => window.open(wsPaths.projectDetail(selectedProject.id), "_blank")} drag={drag} onDragStart={onDragStart} didDragRef={didDragRef} members={memberMap} />
               </div>
+              {/* Milestone header bar — only when drilled into a milestone */}
+              {showingIssues && selectedMilestone && (() => {
+                const projectMilestone = projectMilestones.find((m) => m.id === selectedMilestone.id);
+                return projectMilestone ? (
+                  <div className="border-b border-border/20">
+                    <MilestoneBar
+                      milestone={projectMilestone}
+                      pxPerDay={pxPerDay}
+                      timelineStart={timelineStart}
+                      drag={drag}
+                      onDragStart={onDragStart}
+                      didDragRef={didDragRef}
+                    />
+                  </div>
+                ) : null;
+              })()}
               {showingIssues
                 ? milestoneIssues.map((issue) => (
                     <div key={issue.id} className="border-b border-border/20">
@@ -829,6 +896,9 @@ export function RoadmapPage() {
                       milestone={m}
                       pxPerDay={pxPerDay}
                       timelineStart={timelineStart}
+                      drag={drag}
+                      onDragStart={onDragStart}
+                      didDragRef={didDragRef}
                       onClick={() => setSelectedMilestone({ id: m.id, name: m.name, start_date: m.start_date, target_date: m.target_date })}
                     />
                   ))}
