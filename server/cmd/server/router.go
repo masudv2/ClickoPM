@@ -253,6 +253,12 @@ func NewRouter(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus, analytics
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.RequireWorkspaceMember(queries))
 
+			// Admin/owner-only paths get scoped to roles via .With() at the
+			// individual route below. The whole-route gating happens inline so
+			// the surrounding membership-only routes (issues, comments, etc.)
+			// stay open to regular members.
+			adminOnly := middleware.RequireWorkspaceRole(queries, "owner", "admin")
+
 			// Assignee frequency
 			r.Get("/api/assignee-frequency", h.GetAssigneeFrequency)
 
@@ -291,8 +297,8 @@ func NewRouter(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus, analytics
 			// Task messages (user-facing, not daemon auth)
 			r.Get("/api/tasks/{taskId}/messages", h.ListTaskMessagesByUser)
 
-			// Roadmap
-			r.Get("/api/roadmap", h.ListRoadmapProjects)
+			// Roadmap (admin/owner)
+			r.With(adminOnly).Get("/api/roadmap", h.ListRoadmapProjects)
 
 			// Projects
 			r.Route("/api/projects", func(r chi.Router) {
@@ -302,42 +308,43 @@ func NewRouter(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus, analytics
 				r.Route("/{id}", func(r chi.Router) {
 					r.Get("/", h.GetProject)
 					r.Put("/", h.UpdateProject)
-					r.Delete("/", h.DeleteProject)
-					r.Post("/archive", h.ArchiveProject)
-					r.Post("/unarchive", h.UnarchiveProject)
+					r.With(adminOnly).Delete("/", h.DeleteProject)
+					r.With(adminOnly).Post("/archive", h.ArchiveProject)
+					r.With(adminOnly).Post("/unarchive", h.UnarchiveProject)
 				})
 			})
 
-			// Labels
+			// Labels — list open to members; mutations admin/owner.
 			r.Route("/api/labels", func(r chi.Router) {
 				r.Get("/", h.ListLabels)
-				r.Post("/", h.CreateLabel)
+				r.With(adminOnly).Post("/", h.CreateLabel)
 				r.Route("/{id}", func(r chi.Router) {
-					r.Put("/", h.UpdateLabel)
-					r.Delete("/", h.DeleteLabel)
+					r.With(adminOnly).Put("/", h.UpdateLabel)
+					r.With(adminOnly).Delete("/", h.DeleteLabel)
 				})
 			})
 
-			// Teams
+			// Teams — list/get + member listing open (needed for issue creation
+			// and pickers); mutations admin/owner.
 			r.Route("/api/teams", func(r chi.Router) {
 				r.Get("/", h.ListTeams)
-				r.Post("/", h.CreateTeam)
+				r.With(adminOnly).Post("/", h.CreateTeam)
 				r.Route("/{id}", func(r chi.Router) {
 					r.Get("/", h.GetTeam)
-					r.Put("/", h.UpdateTeam)
-					r.Delete("/", h.DeleteTeam)
+					r.With(adminOnly).Put("/", h.UpdateTeam)
+					r.With(adminOnly).Delete("/", h.DeleteTeam)
 					r.Get("/members", h.ListTeamMembers)
-					r.Post("/members", h.AddTeamMember)
-					r.Delete("/members/{memberId}", h.RemoveTeamMember)
+					r.With(adminOnly).Post("/members", h.AddTeamMember)
+					r.With(adminOnly).Delete("/members/{memberId}", h.RemoveTeamMember)
 				})
 			})
 
-			// Dashboard
-			r.Get("/api/dashboard", h.GetDashboard)
+			// Dashboard (admin/owner)
+			r.With(adminOnly).Get("/api/dashboard", h.GetDashboard)
 
-			// Workload
-			r.Get("/api/workload", h.GetWorkload)
-			r.Get("/api/workload/issues", h.GetWorkloadIssues)
+			// Workload (admin/owner)
+			r.With(adminOnly).Get("/api/workload", h.GetWorkload)
+			r.With(adminOnly).Get("/api/workload/issues", h.GetWorkloadIssues)
 
 			// Cycles
 			r.Route("/api/teams/{teamId}/cycles", func(r chi.Router) {
@@ -366,8 +373,8 @@ func NewRouter(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus, analytics
 				r.Delete("/", h.DeleteMilestone)
 			})
 
-			// Autopilots
-			r.Route("/api/autopilots", func(r chi.Router) {
+			// Autopilots (admin/owner)
+			r.With(adminOnly).Route("/api/autopilots", func(r chi.Router) {
 				r.Get("/", h.ListAutopilots)
 				r.Post("/", h.CreateAutopilot)
 				r.Route("/{id}", func(r chi.Router) {
@@ -404,8 +411,8 @@ func NewRouter(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus, analytics
 				r.Delete("/reactions", h.RemoveReaction)
 			})
 
-			// Agents
-			r.Route("/api/agents", func(r chi.Router) {
+			// Agents (admin/owner)
+			r.With(adminOnly).Route("/api/agents", func(r chi.Router) {
 				r.Get("/", h.ListAgents)
 				r.Post("/", h.CreateAgent)
 				r.Route("/{id}", func(r chi.Router) {
@@ -419,8 +426,8 @@ func NewRouter(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus, analytics
 				})
 			})
 
-			// Skills
-			r.Route("/api/skills", func(r chi.Router) {
+			// Skills (admin/owner)
+			r.With(adminOnly).Route("/api/skills", func(r chi.Router) {
 				r.Get("/", h.ListSkills)
 				r.Post("/", h.CreateSkill)
 				r.Post("/import", h.ImportSkill)
@@ -440,8 +447,8 @@ func NewRouter(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus, analytics
 				r.Get("/summary", h.GetWorkspaceUsageSummary)
 			})
 
-			// Runtimes
-			r.Route("/api/runtimes", func(r chi.Router) {
+			// Runtimes (admin/owner)
+			r.With(adminOnly).Route("/api/runtimes", func(r chi.Router) {
 				r.Get("/", h.ListAgentRuntimes)
 				r.Route("/{runtimeId}", func(r chi.Router) {
 					r.Get("/usage", h.GetRuntimeUsage)
@@ -461,7 +468,8 @@ func NewRouter(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus, analytics
 			// Tasks (user-facing, with ownership check)
 			r.Post("/api/tasks/{taskId}/cancel", h.CancelTaskByUser)
 
-			r.Route("/api/chat/sessions", func(r chi.Router) {
+			// Chat (admin/owner)
+			r.With(adminOnly).Route("/api/chat/sessions", func(r chi.Router) {
 				r.Post("/", h.CreateChatSession)
 				r.Get("/", h.ListChatSessions)
 				r.Route("/{sessionId}", func(r chi.Router) {
@@ -473,17 +481,17 @@ func NewRouter(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus, analytics
 					r.Post("/read", h.MarkChatSessionRead)
 				})
 			})
-			r.Get("/api/chat/pending-tasks", h.ListPendingChatTasks)
+			r.With(adminOnly).Get("/api/chat/pending-tasks", h.ListPendingChatTasks)
 
-			// Slack
-			r.Route("/api/slack", func(r chi.Router) {
+			// Slack (admin/owner)
+			r.With(adminOnly).Route("/api/slack", func(r chi.Router) {
 				r.Get("/channels", h.ListSlackChannels)
 				r.Post("/send-report", h.SendTestReport)
 			})
 
-			// --- Ticketing (internal team routes, clients blocked) ---
+			// --- Ticketing (admin/owner only — clients and members blocked) ---
 			r.Group(func(r chi.Router) {
-				r.Use(middleware.RequireInternalMember(queries))
+				r.Use(middleware.RequireWorkspaceRole(queries, "owner", "admin"))
 
 				// SLA Policies
 				r.Route("/api/sla-policies", func(r chi.Router) {
