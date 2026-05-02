@@ -634,7 +634,7 @@ export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }
                     </SidebarMenuItem>
                   );
                 })()}
-                {(() => {
+                {isAdminOrOwner && (() => {
                   const href = p.roadmap();
                   const isActive = pathname === href;
                   return (
@@ -650,7 +650,7 @@ export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }
                     </SidebarMenuItem>
                   );
                 })()}
-                {personalNav.map((item) => {
+                {personalNav.filter((item) => isAdminOrOwner || item.key !== "chat").map((item) => {
                   const href = p[item.key]();
                   const isActive = pathname === href;
                   return (
@@ -722,35 +722,37 @@ export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }
             </SidebarGroupContent>
           </SidebarGroup>
 
-          <SidebarGroup>
-            <SidebarGroupLabel>Workspace</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu className="gap-0.5">
-                {workspaceNav.map((item) => {
-                  const href = p[item.key]();
-                  const isActive = pathname === href;
-                  return (
-                    <SidebarMenuItem key={item.key}>
-                      <SidebarMenuButton
-                        isActive={isActive}
-                        render={<AppLink href={href} />}
-                        className="text-muted-foreground hover:not-data-active:bg-sidebar-accent/70 data-active:bg-sidebar-accent data-active:text-sidebar-accent-foreground"
-                      >
-                        <item.icon />
-                        <span>{item.label}</span>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  );
-                })}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
+          {isAdminOrOwner && (
+            <SidebarGroup>
+              <SidebarGroupLabel>Workspace</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu className="gap-0.5">
+                  {workspaceNav.map((item) => {
+                    const href = p[item.key]();
+                    const isActive = pathname === href;
+                    return (
+                      <SidebarMenuItem key={item.key}>
+                        <SidebarMenuButton
+                          isActive={isActive}
+                          render={<AppLink href={href} />}
+                          className="text-muted-foreground hover:not-data-active:bg-sidebar-accent/70 data-active:bg-sidebar-accent data-active:text-sidebar-accent-foreground"
+                        >
+                          <item.icon />
+                          <span>{item.label}</span>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    );
+                  })}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          )}
 
           <SidebarGroup>
             <SidebarGroupLabel>Configure</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu className="gap-0.5">
-                {configureNav.map((item) => {
+                {configureNav.filter((item) => isAdminOrOwner || item.key === "settings").map((item) => {
                   const href = p[item.key]();
                   const isActive = pathname === href;
                   return (
