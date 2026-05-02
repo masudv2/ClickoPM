@@ -598,7 +598,9 @@ export function RoadmapPage() {
   const { data: milestoneIssues = [] } = useQuery({
     queryKey: ["issues", wsId, "milestone", selectedMilestone?.id],
     queryFn: () => api.listIssues({ milestone_id: selectedMilestone!.id, limit: 200 }),
-    select: (data) => data.issues,
+    // Sort by issue number ascending so the milestone view orders the same way
+    // as the issues page (CLI-72 above CLI-75) instead of newest-first.
+    select: (data) => [...data.issues].sort((a, b) => a.number - b.number),
     enabled: !!selectedMilestone,
   });
 
