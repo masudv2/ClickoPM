@@ -51,6 +51,34 @@ export function useUpdateProject() {
   });
 }
 
+export function useReorderProjects() {
+  const qc = useQueryClient();
+  const wsId = useWorkspaceId();
+  return useMutation({
+    mutationFn: ({ ids, positions }: { ids: string[]; positions: number[] }) =>
+      api.reorderProjects(ids, positions),
+    onMutate: ({ ids, positions }) => {
+      const prevList = qc.getQueryData<ListProjectsResponse>(projectKeys.list(wsId));
+      const posByID = new Map(ids.map((id, i) => [id, positions[i]!] as const));
+      qc.setQueryData<ListProjectsResponse>(projectKeys.list(wsId), (old) => {
+        if (!old) return old;
+        const next = old.projects.map((p) =>
+          posByID.has(p.id) ? { ...p, position: posByID.get(p.id)! } : p,
+        );
+        next.sort((a, b) => a.position - b.position);
+        return { ...old, projects: next };
+      });
+      return { prevList };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prevList) qc.setQueryData(projectKeys.list(wsId), ctx.prevList);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: projectKeys.list(wsId) });
+    },
+  });
+}
+
 export function useDeleteProject() {
   const qc = useQueryClient();
   const wsId = useWorkspaceId();

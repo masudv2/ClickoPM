@@ -1037,6 +1037,13 @@ export class ApiClient {
     await this.fetch(`/api/projects/${id}`, { method: "DELETE" });
   }
 
+  async reorderProjects(ids: string[], positions: number[]): Promise<void> {
+    await this.fetch(`/api/projects/reorder`, {
+      method: "POST",
+      body: JSON.stringify({ ids, positions }),
+    });
+  }
+
   async listRoadmapProjects(params?: { team_id?: string }): Promise<ListRoadmapProjectsResponse> {
     const search = new URLSearchParams();
     if (params?.team_id) search.set("team_id", params.team_id);

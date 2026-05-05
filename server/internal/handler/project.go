@@ -31,6 +31,7 @@ type ProjectResponse struct {
 	StartDate   *string `json:"start_date"`
 	TargetDate  *string `json:"target_date"`
 	ArchivedAt  *string `json:"archived_at"`
+	Position    float64 `json:"position"`
 	CreatedAt   string  `json:"created_at"`
 	UpdatedAt   string  `json:"updated_at"`
 	IssueCount  int64   `json:"issue_count"`
@@ -52,6 +53,7 @@ func projectToResponse(p db.Project) ProjectResponse {
 		StartDate:   dateToPtr(p.StartDate),
 		TargetDate:  dateToPtr(p.TargetDate),
 		ArchivedAt:  timestampToPtr(p.ArchivedAt),
+		Position:    p.Position,
 		CreatedAt:   timestampToString(p.CreatedAt),
 		UpdatedAt:   timestampToString(p.UpdatedAt),
 	}
@@ -386,6 +388,45 @@ func (h *Handler) UnarchiveProject(w http.ResponseWriter, r *http.Request) {
 	resp := projectToResponse(project)
 	h.publish(protocol.EventProjectUpdated, workspaceID, "member", userID, map[string]any{"project": resp})
 	writeJSON(w, http.StatusOK, resp)
+}
+
+type ReorderProjectsRequest struct {
+	IDs       []string  `json:"ids"`
+	Positions []float64 `json:"positions"`
+}
+
+func (h *Handler) ReorderProjects(w http.ResponseWriter, r *http.Request) {
+	workspaceID := h.resolveWorkspaceID(r)
+	var req ReorderProjectsRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	if len(req.IDs) == 0 || len(req.IDs) != len(req.Positions) {
+		writeError(w, http.StatusBadRequest, "ids and positions length mismatch")
+		return
+	}
+	// Verify every project belongs to this workspace before any write.
+	uuids := make([]pgtype.UUID, len(req.IDs))
+	for i, s := range req.IDs {
+		uuids[i] = parseUUID(s)
+		if _, err := h.Queries.GetProjectInWorkspace(r.Context(), db.GetProjectInWorkspaceParams{
+			ID: uuids[i], WorkspaceID: parseUUID(workspaceID),
+		}); err != nil {
+			writeError(w, http.StatusNotFound, "project not found")
+			return
+		}
+	}
+	if err := h.Queries.ReorderProjects(r.Context(), db.ReorderProjectsParams{
+		Column1: uuids,
+		Column2: req.Positions,
+	}); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to reorder")
+		return
+	}
+	userID := requestUserID(r)
+	h.publish(protocol.EventProjectUpdated, workspaceID, "member", userID, map[string]any{"reorder": true})
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // SearchProjectResponse extends ProjectResponse with search metadata.

@@ -15,6 +15,7 @@ export interface Project {
   lead_id: string | null;
   start_date: string | null;
   target_date: string | null;
+  position: number;
   created_at: string;
   updated_at: string;
   issue_count: number;

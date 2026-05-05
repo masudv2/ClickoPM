@@ -1,15 +1,32 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronRight, Plus, MoreHorizontal, Settings, Link2, LogOut, ListTodo, Timer, FolderKanban, FolderPlus, Briefcase } from "lucide-react";
+import {
+  DndContext,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { AppLink } from "../../navigation";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { useWorkspacePaths } from "@multica/core/paths";
 import { teamListOptions } from "@multica/core/teams";
 import { projectListOptions } from "@multica/core/projects/queries";
+import { useReorderProjects } from "@multica/core/projects/mutations";
 import { cycleListOptions } from "@multica/core/cycles/queries";
-import type { Team } from "@multica/core/types";
+import type { Project, Team } from "@multica/core/types";
+import { cn } from "@multica/ui/lib/utils";
 import { Popover, PopoverTrigger, PopoverContent } from "@multica/ui/components/ui/popover";
 import { useModalStore } from "@multica/core/modals";
 import { LABEL_COLOR_CONFIG } from "@multica/core/labels";
@@ -23,35 +40,91 @@ function TeamIcon({ team }: { team: Team }) {
   );
 }
 
+function SortableProjectItem({
+  project,
+  teamIdentifier,
+}: {
+  project: Project;
+  teamIdentifier: string;
+}) {
+  const p = useWorkspacePaths();
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: project.id });
+  const wasDragged = useRef(false);
+
+  useEffect(() => {
+    if (isDragging) wasDragged.current = true;
+  }, [isDragging]);
+
+  const total = project.issue_count || 0;
+  const done = project.done_count || 0;
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  const style = { transform: CSS.Transform.toString(transform), transition };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(isDragging && "opacity-30")}
+      {...attributes}
+      {...listeners}
+    >
+      <AppLink
+        href={p.teamProjectDetail(teamIdentifier, project.id)}
+        draggable={false}
+        onClick={(e) => {
+          if (wasDragged.current) {
+            wasDragged.current = false;
+            e.preventDefault();
+          }
+        }}
+        className={cn(
+          "flex items-center gap-2 rounded-md px-2 py-1 pl-10 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors",
+          isDragging && "pointer-events-none",
+        )}
+      >
+        <Briefcase className="size-3.5 shrink-0 text-muted-foreground" />
+        <span className="flex-1 truncate">{project.title}</span>
+        <span className="text-xs tabular-nums">{pct}%</span>
+      </AppLink>
+    </div>
+  );
+}
+
 function TeamProjectsList({ teamId, teamIdentifier }: { teamId: string; teamIdentifier: string }) {
   const wsId = useWorkspaceId();
-  const p = useWorkspacePaths();
   const { data: allProjects = [] } = useQuery(projectListOptions(wsId));
   const teamProjects = allProjects.filter((proj) => proj.team_id === teamId);
+  const reorderProjects = useReorderProjects();
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
   if (teamProjects.length === 0) {
     return <p className="pl-10 text-xs text-muted-foreground py-1">No projects</p>;
   }
 
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = teamProjects.findIndex((p) => p.id === active.id);
+    const newIndex = teamProjects.findIndex((p) => p.id === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+    const reordered = arrayMove(teamProjects, oldIndex, newIndex);
+    // Reuse the team's existing position slots (sorted ascending) and assign
+    // them to the reordered items by index. This keeps positions of other
+    // teams' projects untouched while changing the within-team order.
+    const slots = teamProjects.map((p) => p.position).sort((a, b) => a - b);
+    const ids = reordered.map((p) => p.id);
+    const positions = reordered.map((_, i) => slots[i] ?? i + 1);
+    reorderProjects.mutate({ ids, positions });
+  };
+
   return (
-    <>
-      {teamProjects.map((proj) => {
-        const total = proj.issue_count || 0;
-        const done = proj.done_count || 0;
-        const pct = total > 0 ? Math.round((done / total) * 100) : 0;
-        return (
-          <AppLink
-            key={proj.id}
-            href={p.teamProjectDetail(teamIdentifier, proj.id)}
-            className="flex items-center gap-2 rounded-md px-2 py-1 pl-10 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-          >
-            <Briefcase className="size-3.5 shrink-0 text-muted-foreground" />
-            <span className="flex-1 truncate">{proj.title}</span>
-            <span className="text-xs tabular-nums">{pct}%</span>
-          </AppLink>
-        );
-      })}
-    </>
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <SortableContext items={teamProjects.map((p) => p.id)} strategy={verticalListSortingStrategy}>
+        {teamProjects.map((proj) => (
+          <SortableProjectItem key={proj.id} project={proj} teamIdentifier={teamIdentifier} />
+        ))}
+      </SortableContext>
+    </DndContext>
   );
 }
 

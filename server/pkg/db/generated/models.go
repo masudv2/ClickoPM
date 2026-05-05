@@ -411,6 +411,7 @@ type Project struct {
 	StartDate   pgtype.Date        `json:"start_date"`
 	TargetDate  pgtype.Date        `json:"target_date"`
 	ArchivedAt  pgtype.Timestamptz `json:"archived_at"`
+	Position    float64            `json:"position"`
 }
 
 type Skill struct {

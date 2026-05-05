@@ -193,7 +193,7 @@ func (q *Queries) ListClientProjectIDs(ctx context.Context, clientID pgtype.UUID
 }
 
 const listClientProjects = `-- name: ListClientProjects :many
-SELECT p.id, p.workspace_id, p.title, p.description, p.icon, p.status, p.lead_type, p.lead_id, p.created_at, p.updated_at, p.priority, p.team_id, p.start_date, p.target_date, p.archived_at FROM project p
+SELECT p.id, p.workspace_id, p.title, p.description, p.icon, p.status, p.lead_type, p.lead_id, p.created_at, p.updated_at, p.priority, p.team_id, p.start_date, p.target_date, p.archived_at, p.position FROM project p
 JOIN client_project cp ON cp.project_id = p.id
 WHERE cp.client_id = $1
 ORDER BY p.title ASC
@@ -224,6 +224,7 @@ func (q *Queries) ListClientProjects(ctx context.Context, clientID pgtype.UUID) 
 			&i.StartDate,
 			&i.TargetDate,
 			&i.ArchivedAt,
+			&i.Position,
 		); err != nil {
 			return nil, err
 		}

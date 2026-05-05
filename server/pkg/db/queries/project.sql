@@ -5,7 +5,7 @@ WHERE workspace_id = $1
   AND (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status'))
   AND (sqlc.narg('priority')::text IS NULL OR priority = sqlc.narg('priority'))
   AND (sqlc.narg('team_id')::uuid IS NULL OR team_id = sqlc.narg('team_id'))
-ORDER BY created_at DESC;
+ORDER BY position ASC, created_at DESC;
 
 -- name: GetProject :one
 SELECT * FROM project
@@ -50,6 +50,12 @@ RETURNING *;
 UPDATE project SET archived_at = NULL, updated_at = now()
 WHERE id = $1
 RETURNING *;
+
+-- name: ReorderProjects :exec
+UPDATE project
+SET position = data.position, updated_at = now()
+FROM (SELECT unnest($1::uuid[]) AS id, unnest($2::float8[]) AS position) AS data
+WHERE project.id = data.id;
 
 -- name: CountIssuesByProject :one
 SELECT count(*) FROM issue
