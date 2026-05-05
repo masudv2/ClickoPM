@@ -197,9 +197,17 @@ function ListRowContent({ issue }: { issue: Issue }) {
 function SortableListRow({
   issue,
   childProgress,
+  isChild,
+  hasVisibleChildren,
+  collapsed,
+  onToggleCollapse,
 }: {
   issue: Issue;
   childProgress?: ChildProgress;
+  isChild?: boolean;
+  hasVisibleChildren?: boolean;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }) {
   const {
     attributes,
@@ -227,10 +235,50 @@ function SortableListRow({
         <GripVertical className="size-3.5" />
       </button>
       <div className="flex-1 min-w-0">
-        <ListRow issue={issue} childProgress={childProgress} />
+        <ListRow
+          issue={issue}
+          childProgress={childProgress}
+          isChild={isChild}
+          hasVisibleChildren={hasVisibleChildren}
+          collapsed={collapsed}
+          onToggleCollapse={onToggleCollapse}
+        />
       </div>
     </div>
   );
+}
+
+/**
+ * Re-orders issues into a tree-like flat list: each parent is followed by its
+ * direct children (children whose parent is also in this section). Returns the
+ * sequenced list and a map from parent id → its visible children, so the
+ * renderer knows which rows get a chevron and which to indent.
+ *
+ * Roots (no parent, or parent not in this section) keep their original order.
+ */
+function buildTree(issues: Issue[]) {
+  const idSet = new Set(issues.map((i) => i.id));
+  const childrenOf = new Map<string, Issue[]>();
+  const roots: Issue[] = [];
+  for (const issue of issues) {
+    const pid = issue.parent_issue_id;
+    if (pid && idSet.has(pid)) {
+      const arr = childrenOf.get(pid) ?? [];
+      arr.push(issue);
+      childrenOf.set(pid, arr);
+    } else {
+      roots.push(issue);
+    }
+  }
+  const sequenced: Array<{ issue: Issue; isChild: boolean }> = [];
+  for (const root of roots) {
+    sequenced.push({ issue: root, isChild: false });
+    const kids = childrenOf.get(root.id);
+    if (kids) {
+      for (const k of kids) sequenced.push({ issue: k, isChild: true });
+    }
+  }
+  return { sequenced, childrenOf };
 }
 
 function StatusAccordionItem({
@@ -262,6 +310,13 @@ function StatusAccordionItem({
   const selectedCount = issueIds.filter((id) => selectedIds.has(id)).length;
   const allSelected = issues.length > 0 && selectedCount === issues.length;
   const someSelected = selectedCount > 0;
+
+  const { sequenced, childrenOf } = useMemo(() => buildTree(issues), [issues]);
+  const [collapsedParents, setCollapsedParents] = useState<Set<string>>(() => new Set());
+  const visibleRows = useMemo(
+    () => sequenced.filter((r) => !r.isChild || !collapsedParents.has(r.issue.parent_issue_id ?? "")),
+    [sequenced, collapsedParents],
+  );
 
   return (
     <Accordion.Item value={status}>
@@ -318,18 +373,50 @@ function StatusAccordionItem({
           <>
             {isDraggable ? (
               <SortableContext items={issueIds} strategy={verticalListSortingStrategy}>
-                {issues.map((issue) => (
-                  <SortableListRow
+                {visibleRows.map(({ issue, isChild }) => {
+                  const hasVisibleChildren = !isChild && (childrenOf.get(issue.id)?.length ?? 0) > 0;
+                  return (
+                    <SortableListRow
+                      key={issue.id}
+                      issue={issue}
+                      childProgress={childProgressMap.get(issue.id)}
+                      isChild={isChild}
+                      hasVisibleChildren={hasVisibleChildren}
+                      collapsed={collapsedParents.has(issue.id)}
+                      onToggleCollapse={hasVisibleChildren ? () => {
+                        setCollapsedParents((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(issue.id)) next.delete(issue.id);
+                          else next.add(issue.id);
+                          return next;
+                        });
+                      } : undefined}
+                    />
+                  );
+                })}
+              </SortableContext>
+            ) : (
+              visibleRows.map(({ issue, isChild }) => {
+                const hasVisibleChildren = !isChild && (childrenOf.get(issue.id)?.length ?? 0) > 0;
+                return (
+                  <ListRow
                     key={issue.id}
                     issue={issue}
                     childProgress={childProgressMap.get(issue.id)}
+                    isChild={isChild}
+                    hasVisibleChildren={hasVisibleChildren}
+                    collapsed={collapsedParents.has(issue.id)}
+                    onToggleCollapse={hasVisibleChildren ? () => {
+                      setCollapsedParents((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(issue.id)) next.delete(issue.id);
+                        else next.add(issue.id);
+                        return next;
+                      });
+                    } : undefined}
                   />
-                ))}
-              </SortableContext>
-            ) : (
-              issues.map((issue) => (
-                <ListRow key={issue.id} issue={issue} childProgress={childProgressMap.get(issue.id)} />
-              ))
+                );
+              })
             )}
             {hasMore && (
               <InfiniteScrollSentinel onVisible={loadMore} loading={isLoading} />

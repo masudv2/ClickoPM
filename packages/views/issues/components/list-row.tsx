@@ -2,7 +2,7 @@
 
 import { memo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { CornerDownRight } from "lucide-react";
+import { ChevronRight, CornerDownRight } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@multica/ui/components/ui/tooltip";
 import { AppLink } from "../../navigation";
 import { useNavigation } from "../../navigation";
@@ -34,9 +34,21 @@ function formatDate(date: string): string {
 export const ListRow = memo(function ListRow({
   issue,
   childProgress,
+  isChild = false,
+  hasVisibleChildren = false,
+  collapsed = false,
+  onToggleCollapse,
 }: {
   issue: Issue;
   childProgress?: ChildProgress;
+  /** True when this row is rendered as a sub-task under its parent in the same section. */
+  isChild?: boolean;
+  /** True when this row's parent has children also rendered in this section (chevron shown). */
+  hasVisibleChildren?: boolean;
+  /** Current collapse state of this parent's children. */
+  collapsed?: boolean;
+  /** Click handler for the chevron. */
+  onToggleCollapse?: () => void;
 }) {
   const selected = useIssueSelectionStore((s) => s.selectedIds.has(issue.id));
   const toggle = useIssueSelectionStore((s) => s.toggle);
@@ -51,10 +63,12 @@ export const ListRow = memo(function ListRow({
   const project = issue.project_id ? projects.find((pr) => pr.id === issue.project_id) : undefined;
 
   const showProject = storeProperties.project && project;
-  const showChildProgress = storeProperties.childProgress && childProgress;
+  const showChildProgress = storeProperties.childProgress && childProgress && !hasVisibleChildren;
   const showAssignee = storeProperties.assignee && issue.assignee_type && issue.assignee_id;
   const showDueDate = storeProperties.dueDate && issue.due_date;
-  const showParent = !!issue.parent_issue_id && (issue.parent_title || issue.parent_identifier);
+  // Suppress the parent chip when the parent is rendered immediately above
+  // (the indent already conveys the relationship).
+  const showParent = !isChild && !!issue.parent_issue_id && (issue.parent_title || issue.parent_identifier);
   const showMilestone = !!issue.milestone_id && !!issue.milestone_name;
 
   return (
@@ -62,8 +76,21 @@ export const ListRow = memo(function ListRow({
       <div
         className={`group/row flex h-9 items-center gap-2 px-4 text-sm transition-colors hover:not-data-[popup-open]:bg-accent/60 data-[popup-open]:bg-accent ${
           selected ? "bg-accent/30" : ""
-        }`}
+        } ${isChild ? "pl-10" : ""}`}
       >
+        {hasVisibleChildren && onToggleCollapse ? (
+          <button
+            type="button"
+            className="flex shrink-0 items-center justify-center w-4 h-4 text-muted-foreground hover:text-foreground rounded hover:bg-accent"
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleCollapse(); }}
+            title={collapsed ? "Expand sub-tasks" : "Collapse sub-tasks"}
+          >
+            <ChevronRight className={`size-3.5 transition-transform ${collapsed ? "" : "rotate-90"}`} />
+          </button>
+        ) : (
+          // Spacer to keep priority/checkbox column aligned across rows with/without chevron
+          !isChild && <span className="w-4 h-4 shrink-0" />
+        )}
         <div className="relative flex shrink-0 items-center justify-center w-4 h-4">
           <PriorityIcon
             priority={issue.priority}
