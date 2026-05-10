@@ -111,11 +111,12 @@ func (h *Handler) ListProjects(w http.ResponseWriter, r *http.Request) {
 		includeArchived = pgtype.Bool{Bool: true, Valid: true}
 	}
 	projects, err := h.Queries.ListProjects(r.Context(), db.ListProjectsParams{
-		WorkspaceID:     parseUUID(workspaceID),
-		Status:          statusFilter,
-		Priority:        priorityFilter,
-		TeamID:          teamFilter,
-		IncludeArchived: includeArchived,
+		WorkspaceID:       parseUUID(workspaceID),
+		Status:            statusFilter,
+		Priority:          priorityFilter,
+		TeamID:            teamFilter,
+		IncludeArchived:   includeArchived,
+		AccessibleTeamIds: h.accessibleTeamFilter(r.Context()),
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list projects")
@@ -155,6 +156,10 @@ func (h *Handler) GetProject(w http.ResponseWriter, r *http.Request) {
 		ID: parseUUID(id), WorkspaceID: parseUUID(workspaceID),
 	})
 	if err != nil {
+		writeError(w, http.StatusNotFound, "project not found")
+		return
+	}
+	if !h.canAccessTeam(r.Context(), project.TeamID) {
 		writeError(w, http.StatusNotFound, "project not found")
 		return
 	}
@@ -199,7 +204,7 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 	if req.TeamID != "" {
 		teamUUID = parseUUID(req.TeamID)
 	} else {
-		teams, err := h.Queries.ListTeams(r.Context(), parseUUID(workspaceID))
+		teams, err := h.Queries.ListTeams(r.Context(), db.ListTeamsParams{WorkspaceID: parseUUID(workspaceID)})
 		if err != nil || len(teams) == 0 {
 			writeError(w, http.StatusBadRequest, "team_id is required")
 			return

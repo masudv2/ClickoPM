@@ -104,7 +104,7 @@ func (s *AutopilotService) dispatchCreateIssue(ctx context.Context, ap db.Autopi
 	qtx := s.Queries.WithTx(tx)
 
 	// Get default team for workspace.
-	teams, err := s.Queries.ListTeams(ctx, ap.WorkspaceID)
+	teams, err := s.Queries.ListTeams(ctx, db.ListTeamsParams{WorkspaceID: ap.WorkspaceID})
 	if err != nil || len(teams) == 0 {
 		return fmt.Errorf("no team found for workspace")
 	}

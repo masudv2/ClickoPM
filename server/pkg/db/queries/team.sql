@@ -1,7 +1,14 @@
 -- name: ListTeams :many
+-- accessible_team_ids gates by team_member when set; pass NULL for owner/admin
+-- to bypass the filter and see every team in the workspace.
 SELECT * FROM team
 WHERE workspace_id = $1
+  AND (sqlc.narg('accessible_team_ids')::uuid[] IS NULL OR id = ANY(sqlc.narg('accessible_team_ids')::uuid[]))
 ORDER BY position ASC, created_at ASC;
+
+-- name: ListTeamIDsForMember :many
+-- Returns the team IDs a workspace member belongs to via team_member.
+SELECT team_id FROM team_member WHERE member_id = $1;
 
 -- name: GetTeam :one
 SELECT * FROM team WHERE id = $1;

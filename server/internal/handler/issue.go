@@ -828,17 +828,18 @@ func (h *Handler) ListIssues(w http.ResponseWriter, r *http.Request) {
 	}
 
 	issues, err := h.Queries.ListIssues(ctx, db.ListIssuesParams{
-		WorkspaceID: wsUUID,
-		Limit:       int32(limit),
-		Offset:      int32(offset),
-		Status:      statusFilter,
-		Priority:    priorityFilter,
-		AssigneeID:  assigneeFilter,
-		AssigneeIds: assigneeIdsFilter,
-		CreatorID:   creatorFilter,
-		ProjectID:   projectFilter,
-		TeamID:      teamFilter,
-		MilestoneID: milestoneFilter,
+		WorkspaceID:       wsUUID,
+		Limit:             int32(limit),
+		Offset:            int32(offset),
+		Status:            statusFilter,
+		Priority:          priorityFilter,
+		AssigneeID:        assigneeFilter,
+		AssigneeIds:       assigneeIdsFilter,
+		CreatorID:         creatorFilter,
+		ProjectID:         projectFilter,
+		TeamID:            teamFilter,
+		MilestoneID:       milestoneFilter,
+		AccessibleTeamIds: h.accessibleTeamFilter(ctx),
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list issues")
@@ -1102,7 +1103,7 @@ func (h *Handler) CreateIssue(w http.ResponseWriter, r *http.Request) {
 	if req.TeamID != "" {
 		teamUUID = parseUUID(req.TeamID)
 	} else {
-		teams, err := h.Queries.ListTeams(r.Context(), parseUUID(workspaceID))
+		teams, err := h.Queries.ListTeams(r.Context(), db.ListTeamsParams{WorkspaceID: parseUUID(workspaceID)})
 		if err != nil || len(teams) == 0 {
 			writeError(w, http.StatusBadRequest, "team_id is required")
 			return

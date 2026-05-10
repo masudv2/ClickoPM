@@ -5,6 +5,7 @@ WHERE workspace_id = $1
   AND (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status'))
   AND (sqlc.narg('priority')::text IS NULL OR priority = sqlc.narg('priority'))
   AND (sqlc.narg('team_id')::uuid IS NULL OR team_id = sqlc.narg('team_id'))
+  AND (sqlc.narg('accessible_team_ids')::uuid[] IS NULL OR team_id = ANY(sqlc.narg('accessible_team_ids')::uuid[]))
 ORDER BY position ASC, created_at DESC;
 
 -- name: GetProject :one
@@ -75,6 +76,7 @@ WHERE p.workspace_id = $1
   AND p.archived_at IS NULL
   AND p.status NOT IN ('completed', 'cancelled')
   AND (sqlc.narg('team_id')::uuid IS NULL OR p.team_id = sqlc.narg('team_id'))
+  AND (sqlc.narg('accessible_team_ids')::uuid[] IS NULL OR p.team_id = ANY(sqlc.narg('accessible_team_ids')::uuid[]))
 ORDER BY p.team_id, p.start_date NULLS LAST, p.created_at;
 
 -- name: GetProjectIssueStats :many

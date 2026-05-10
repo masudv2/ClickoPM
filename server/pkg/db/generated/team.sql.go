@@ -227,6 +227,31 @@ func (q *Queries) IsTeamMember(ctx context.Context, arg IsTeamMemberParams) (boo
 	return exists, err
 }
 
+const listTeamIDsForMember = `-- name: ListTeamIDsForMember :many
+SELECT team_id FROM team_member WHERE member_id = $1
+`
+
+// Returns the team IDs a workspace member belongs to via team_member.
+func (q *Queries) ListTeamIDsForMember(ctx context.Context, memberID pgtype.UUID) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listTeamIDsForMember, memberID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var team_id pgtype.UUID
+		if err := rows.Scan(&team_id); err != nil {
+			return nil, err
+		}
+		items = append(items, team_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTeamMembers = `-- name: ListTeamMembers :many
 SELECT m.id, m.workspace_id, m.user_id, m.role, m.created_at,
        u.name, u.email, u.avatar_url
@@ -281,11 +306,19 @@ func (q *Queries) ListTeamMembers(ctx context.Context, teamID pgtype.UUID) ([]Li
 const listTeams = `-- name: ListTeams :many
 SELECT id, workspace_id, name, identifier, icon, color, timezone, settings, issue_counter, position, created_at, updated_at FROM team
 WHERE workspace_id = $1
+  AND ($2::uuid[] IS NULL OR id = ANY($2::uuid[]))
 ORDER BY position ASC, created_at ASC
 `
 
-func (q *Queries) ListTeams(ctx context.Context, workspaceID pgtype.UUID) ([]Team, error) {
-	rows, err := q.db.Query(ctx, listTeams, workspaceID)
+type ListTeamsParams struct {
+	WorkspaceID       pgtype.UUID   `json:"workspace_id"`
+	AccessibleTeamIds []pgtype.UUID `json:"accessible_team_ids"`
+}
+
+// accessible_team_ids gates by team_member when set; pass NULL for owner/admin
+// to bypass the filter and see every team in the workspace.
+func (q *Queries) ListTeams(ctx context.Context, arg ListTeamsParams) ([]Team, error) {
+	rows, err := q.db.Query(ctx, listTeams, arg.WorkspaceID, arg.AccessibleTeamIds)
 	if err != nil {
 		return nil, err
 	}

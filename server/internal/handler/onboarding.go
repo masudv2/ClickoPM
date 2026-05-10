@@ -434,7 +434,7 @@ func (h *Handler) ImportStarterContent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get default team for workspace.
-	teams, err := h.Queries.ListTeams(r.Context(), parseUUID(req.WorkspaceID))
+	teams, err := h.Queries.ListTeams(r.Context(), db.ListTeamsParams{WorkspaceID: parseUUID(req.WorkspaceID)})
 	if err != nil || len(teams) == 0 {
 		writeError(w, http.StatusInternalServerError, "no team found for workspace")
 		return

@@ -126,7 +126,7 @@ func (h *Handler) GetDashboard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 2. Get all teams
-	teams, err := h.Queries.ListTeams(ctx, wsUUID)
+	teams, err := h.Queries.ListTeams(ctx, db.ListTeamsParams{WorkspaceID: wsUUID})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list teams")
 		return

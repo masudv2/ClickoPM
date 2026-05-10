@@ -226,15 +226,17 @@ WHERE workspace_id = $1
   AND ($3::text IS NULL OR status = $3)
   AND ($4::text IS NULL OR priority = $4)
   AND ($5::uuid IS NULL OR team_id = $5)
+  AND ($6::uuid[] IS NULL OR team_id = ANY($6::uuid[]))
 ORDER BY position ASC, created_at DESC
 `
 
 type ListProjectsParams struct {
-	WorkspaceID     pgtype.UUID `json:"workspace_id"`
-	IncludeArchived pgtype.Bool `json:"include_archived"`
-	Status          pgtype.Text `json:"status"`
-	Priority        pgtype.Text `json:"priority"`
-	TeamID          pgtype.UUID `json:"team_id"`
+	WorkspaceID       pgtype.UUID   `json:"workspace_id"`
+	IncludeArchived   pgtype.Bool   `json:"include_archived"`
+	Status            pgtype.Text   `json:"status"`
+	Priority          pgtype.Text   `json:"priority"`
+	TeamID            pgtype.UUID   `json:"team_id"`
+	AccessibleTeamIds []pgtype.UUID `json:"accessible_team_ids"`
 }
 
 func (q *Queries) ListProjects(ctx context.Context, arg ListProjectsParams) ([]Project, error) {
@@ -244,6 +246,7 @@ func (q *Queries) ListProjects(ctx context.Context, arg ListProjectsParams) ([]P
 		arg.Status,
 		arg.Priority,
 		arg.TeamID,
+		arg.AccessibleTeamIds,
 	)
 	if err != nil {
 		return nil, err
@@ -294,12 +297,14 @@ WHERE p.workspace_id = $1
   AND p.archived_at IS NULL
   AND p.status NOT IN ('completed', 'cancelled')
   AND ($2::uuid IS NULL OR p.team_id = $2)
+  AND ($3::uuid[] IS NULL OR p.team_id = ANY($3::uuid[]))
 ORDER BY p.team_id, p.start_date NULLS LAST, p.created_at
 `
 
 type ListProjectsForRoadmapParams struct {
-	WorkspaceID pgtype.UUID `json:"workspace_id"`
-	TeamID      pgtype.UUID `json:"team_id"`
+	WorkspaceID       pgtype.UUID   `json:"workspace_id"`
+	TeamID            pgtype.UUID   `json:"team_id"`
+	AccessibleTeamIds []pgtype.UUID `json:"accessible_team_ids"`
 }
 
 type ListProjectsForRoadmapRow struct {
@@ -324,7 +329,7 @@ type ListProjectsForRoadmapRow struct {
 }
 
 func (q *Queries) ListProjectsForRoadmap(ctx context.Context, arg ListProjectsForRoadmapParams) ([]ListProjectsForRoadmapRow, error) {
-	rows, err := q.db.Query(ctx, listProjectsForRoadmap, arg.WorkspaceID, arg.TeamID)
+	rows, err := q.db.Query(ctx, listProjectsForRoadmap, arg.WorkspaceID, arg.TeamID, arg.AccessibleTeamIds)
 	if err != nil {
 		return nil, err
 	}

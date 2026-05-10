@@ -93,7 +93,10 @@ type UpdateTeamRequest struct {
 func (h *Handler) ListTeams(w http.ResponseWriter, r *http.Request) {
 	workspaceID := h.resolveWorkspaceID(r)
 
-	teams, err := h.Queries.ListTeams(r.Context(), parseUUID(workspaceID))
+	teams, err := h.Queries.ListTeams(r.Context(), db.ListTeamsParams{
+		WorkspaceID:       parseUUID(workspaceID),
+		AccessibleTeamIds: h.accessibleTeamFilter(r.Context()),
+	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list teams")
 		return
@@ -120,6 +123,10 @@ func (h *Handler) GetTeam(w http.ResponseWriter, r *http.Request) {
 
 	team, err := h.Queries.GetTeam(r.Context(), parseUUID(id))
 	if err != nil {
+		writeError(w, http.StatusNotFound, "team not found")
+		return
+	}
+	if !h.canAccessTeam(r.Context(), team.ID) {
 		writeError(w, http.StatusNotFound, "team not found")
 		return
 	}

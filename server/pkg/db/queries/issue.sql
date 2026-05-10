@@ -13,6 +13,7 @@ WHERE workspace_id = $1
   AND (sqlc.narg('project_id')::uuid IS NULL OR project_id = sqlc.narg('project_id'))
   AND (sqlc.narg('team_id')::uuid IS NULL OR team_id = sqlc.narg('team_id'))
   AND (sqlc.narg('milestone_id')::uuid IS NULL OR milestone_id = sqlc.narg('milestone_id'))
+  AND (sqlc.narg('accessible_team_ids')::uuid[] IS NULL OR team_id = ANY(sqlc.narg('accessible_team_ids')::uuid[]))
 ORDER BY position ASC, created_at DESC
 LIMIT $2 OFFSET $3;
 

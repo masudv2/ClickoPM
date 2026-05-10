@@ -231,6 +231,48 @@ func ctxWorkspaceID(ctx context.Context) string {
 	return middleware.WorkspaceIDFromContext(ctx)
 }
 
+// accessibleTeamFilter returns the team UUIDs the calling member can see.
+// Returns nil for owners/admins so list queries skip the filter and return
+// all teams. For regular members, returns the team_member rows; an empty
+// non-nil slice means the member is in no teams and should see nothing.
+func (h *Handler) accessibleTeamFilter(ctx context.Context) []pgtype.UUID {
+	member, ok := ctxMember(ctx)
+	if !ok {
+		return nil
+	}
+	if member.Role == "owner" || member.Role == "admin" {
+		return nil
+	}
+	ids, err := h.Queries.ListTeamIDsForMember(ctx, member.ID)
+	if err != nil {
+		// Fail closed: empty slice → user sees nothing.
+		return []pgtype.UUID{}
+	}
+	if ids == nil {
+		return []pgtype.UUID{}
+	}
+	return ids
+}
+
+// canAccessTeam returns true when the caller can see the given team. Owners
+// and admins always pass; regular members pass when in the team. When no
+// member is in context (tests, internal callers that bypassed the workspace
+// middleware), the gate is open — the layer above is responsible for auth.
+func (h *Handler) canAccessTeam(ctx context.Context, teamID pgtype.UUID) bool {
+	member, ok := ctxMember(ctx)
+	if !ok {
+		return true
+	}
+	if member.Role == "owner" || member.Role == "admin" {
+		return true
+	}
+	ok2, err := h.Queries.IsTeamMember(ctx, db.IsTeamMemberParams{
+		TeamID:   teamID,
+		MemberID: member.ID,
+	})
+	return err == nil && ok2
+}
+
 // workspaceIDFromURL returns the workspace ID from context (preferred) or chi URL param (fallback).
 func workspaceIDFromURL(r *http.Request, param string) string {
 	if id := middleware.WorkspaceIDFromContext(r.Context()); id != "" {
@@ -337,6 +379,10 @@ func (h *Handler) loadIssueForUser(w http.ResponseWriter, r *http.Request, issue
 
 	// Try identifier format first (e.g., "JIA-42").
 	if issue, ok := h.resolveIssueByIdentifier(r.Context(), issueID, workspaceID); ok {
+		if !h.canAccessTeam(r.Context(), issue.TeamID) {
+			writeError(w, http.StatusNotFound, "issue not found")
+			return db.Issue{}, false
+		}
 		return issue, true
 	}
 
@@ -345,6 +391,11 @@ func (h *Handler) loadIssueForUser(w http.ResponseWriter, r *http.Request, issue
 		WorkspaceID: parseUUID(workspaceID),
 	})
 	if err != nil {
+		writeError(w, http.StatusNotFound, "issue not found")
+		return db.Issue{}, false
+	}
+	if !h.canAccessTeam(r.Context(), issue.TeamID) {
+		// Hide existence — same shape as not-found so member can't enumerate.
 		writeError(w, http.StatusNotFound, "issue not found")
 		return db.Issue{}, false
 	}
@@ -425,7 +476,7 @@ func (h *Handler) getTeamIssuePrefix(ctx context.Context, teamID pgtype.UUID) st
 
 // teamPrefixMap builds a map of team UUID string -> identifier for all teams in a workspace.
 func (h *Handler) teamPrefixMap(ctx context.Context, workspaceID pgtype.UUID) map[string]string {
-	teams, err := h.Queries.ListTeams(ctx, workspaceID)
+	teams, err := h.Queries.ListTeams(ctx, db.ListTeamsParams{WorkspaceID: workspaceID})
 	if err != nil {
 		return nil
 	}
