@@ -17,6 +17,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/multica-ai/multica/server/internal/analytics"
+	"github.com/multica-ai/multica/server/internal/daemon"
 	"github.com/multica-ai/multica/server/internal/middleware"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
 	"github.com/multica-ai/multica/server/pkg/protocol"
@@ -826,12 +827,22 @@ func (h *Handler) ClaimTaskByRuntime(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 			}
-			// Load the latest user message for the chat prompt.
+			// Load the latest user message for the chat prompt and any
+			// attachments linked to it.
 			if msgs, err := h.Queries.ListChatMessages(r.Context(), cs.ID); err == nil && len(msgs) > 0 {
-				// Find the last user message.
 				for i := len(msgs) - 1; i >= 0; i-- {
 					if msgs[i].Role == "user" {
 						resp.ChatMessage = msgs[i].Content
+						if attachments, aerr := h.Queries.ListAttachmentsByChatMessage(r.Context(), msgs[i].ID); aerr == nil {
+							for _, a := range attachments {
+								resp.ChatAttachments = append(resp.ChatAttachments, daemon.ChatAttachment{
+									ID:          uuidToString(a.ID),
+									Filename:    a.Filename,
+									ContentType: a.ContentType,
+									SizeBytes:   a.SizeBytes,
+								})
+							}
+						}
 						break
 					}
 				}

@@ -45,6 +45,18 @@ WHERE workspace_id = $2
   AND issue_id IS NULL
   AND id = ANY($3::uuid[]);
 
+-- name: LinkAttachmentsToChatMessage :exec
+UPDATE attachment
+SET chat_message_id = $1
+WHERE workspace_id = $2
+  AND chat_message_id IS NULL
+  AND id = ANY($3::uuid[]);
+
+-- name: ListAttachmentsByChatMessage :many
+SELECT * FROM attachment
+WHERE chat_message_id = $1
+ORDER BY created_at ASC;
+
 -- name: ListAttachmentsByTicketMessageIDs :many
 SELECT * FROM attachment
 WHERE ticket_message_id = ANY($1::uuid[]) AND workspace_id = $2

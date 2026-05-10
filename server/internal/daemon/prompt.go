@@ -62,6 +62,18 @@ func buildChatPrompt(task Task) string {
 	var b strings.Builder
 	b.WriteString("You are running as a chat assistant for a Multica workspace.\n")
 	b.WriteString("A user is chatting with you directly. Respond to their message.\n\n")
+	if len(task.ChatAttachments) > 0 {
+		b.WriteString("Files attached to this message — fetch each with `multica attachment download <id>` before reasoning about them. Pass `--output-dir` if you want a stable location:\n")
+		for _, a := range task.ChatAttachments {
+			fmt.Fprintf(&b, "- id=%s name=%s type=%s size=%d\n", a.ID, a.Filename, a.ContentType, a.SizeBytes)
+		}
+		b.WriteString("After downloading, read the file contents (PDFs, images, text) and incorporate them into your reply.\n\n")
+	}
+	if strings.Contains(task.ChatMessage, "Voice transcript:") {
+		b.WriteString("The user's message contains a voice transcript. If it is long or rambling, begin your reply with a brief structured summary (Key decisions / Action items / Open questions) before asking what they want to do next.\n\n")
+	} else if len(task.ChatMessage) > 1500 {
+		b.WriteString("The user's message is long. Begin your reply with a brief structured summary (Key decisions / Action items / Open questions) before asking what they want to do next.\n\n")
+	}
 	fmt.Fprintf(&b, "User message:\n%s\n", task.ChatMessage)
 	return b.String()
 }

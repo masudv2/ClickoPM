@@ -116,7 +116,7 @@ export function ChatPage() {
   const { candidate: anchorCandidate } = useRouteAnchorCandidate(wsId);
 
   const handleSend = useCallback(
-    async (content: string) => {
+    async (content: string, attachmentIds?: string[]) => {
       if (!activeAgent) {
         apiLogger.warn("sendChatMessage skipped: no active agent");
         return;
@@ -134,6 +134,7 @@ export function ChatPage() {
         isNewSession,
         agentId: activeAgent.id,
         contentLength: finalContent.length,
+        attachmentCount: attachmentIds?.length ?? 0,
       });
 
       if (!sessionId) {
@@ -158,7 +159,7 @@ export function ChatPage() {
         (old) => (old ? [...old, optimistic] : [optimistic]),
       );
 
-      const result = await api.sendChatMessage(sessionId, finalContent);
+      const result = await api.sendChatMessage(sessionId, finalContent, attachmentIds);
       qc.setQueryData(chatKeys.pendingTask(sessionId), {
         task_id: result.task_id,
         status: "queued",

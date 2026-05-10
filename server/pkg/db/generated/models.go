@@ -106,6 +106,7 @@ type Attachment struct {
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	TicketID        pgtype.UUID        `json:"ticket_id"`
 	TicketMessageID pgtype.UUID        `json:"ticket_message_id"`
+	ChatMessageID   pgtype.UUID        `json:"chat_message_id"`
 }
 
 type Autopilot struct {

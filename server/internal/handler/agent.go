@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/multica-ai/multica/server/internal/analytics"
+	"github.com/multica-ai/multica/server/internal/daemon"
 	"github.com/multica-ai/multica/server/internal/logger"
 	"github.com/multica-ai/multica/server/internal/service"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
@@ -139,8 +140,9 @@ type AgentTaskResponse struct {
 	TriggerCommentContent   string          `json:"trigger_comment_content,omitempty"`   // content of the triggering comment
 	TriggerAuthorType       string          `json:"trigger_author_type,omitempty"`       // "agent" or "member" — author kind of the triggering comment
 	TriggerAuthorName       string          `json:"trigger_author_name,omitempty"`       // display name of the triggering comment author
-	ChatSessionID           string          `json:"chat_session_id,omitempty"`           // non-empty for chat tasks
-	ChatMessage             string          `json:"chat_message,omitempty"`              // user message for chat tasks
+	ChatSessionID           string                  `json:"chat_session_id,omitempty"`           // non-empty for chat tasks
+	ChatMessage             string                  `json:"chat_message,omitempty"`              // user message for chat tasks
+	ChatAttachments         []daemon.ChatAttachment `json:"chat_attachments,omitempty"`          // files attached to the latest user message
 	AutopilotRunID          string          `json:"autopilot_run_id,omitempty"`          // non-empty for autopilot-spawned tasks
 	AutopilotID             string          `json:"autopilot_id,omitempty"`              // autopilot that spawned this task
 	AutopilotTitle          string          `json:"autopilot_title,omitempty"`           // autopilot title used as task context

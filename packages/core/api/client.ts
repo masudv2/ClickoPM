@@ -976,10 +976,13 @@ export class ApiClient {
     return this.fetch(`/api/chat/sessions/${sessionId}/messages`);
   }
 
-  async sendChatMessage(sessionId: string, content: string): Promise<SendChatMessageResponse> {
+  async sendChatMessage(sessionId: string, content: string, attachmentIds?: string[]): Promise<SendChatMessageResponse> {
     return this.fetch(`/api/chat/sessions/${sessionId}/messages`, {
       method: "POST",
-      body: JSON.stringify({ content }),
+      body: JSON.stringify({
+        content,
+        ...(attachmentIds && attachmentIds.length > 0 ? { attachment_ids: attachmentIds } : {}),
+      }),
     });
   }
 

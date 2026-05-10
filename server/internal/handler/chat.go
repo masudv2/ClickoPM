@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
 	"github.com/multica-ai/multica/server/pkg/protocol"
 )
@@ -184,7 +185,8 @@ func (h *Handler) ArchiveChatSession(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------------------
 
 type SendChatMessageRequest struct {
-	Content string `json:"content"`
+	Content       string   `json:"content"`
+	AttachmentIDs []string `json:"attachment_ids,omitempty"`
 }
 
 type SendChatMessageResponse struct {
@@ -237,6 +239,22 @@ func (h *Handler) SendChatMessage(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to create chat message")
 		return
+	}
+
+	// Link any uploaded attachments to this message so the daemon's chat-task
+	// claim can find them.
+	if len(req.AttachmentIDs) > 0 {
+		uuids := make([]pgtype.UUID, len(req.AttachmentIDs))
+		for i, s := range req.AttachmentIDs {
+			uuids[i] = parseUUID(s)
+		}
+		if err := h.Queries.LinkAttachmentsToChatMessage(r.Context(), db.LinkAttachmentsToChatMessageParams{
+			ChatMessageID: msg.ID,
+			WorkspaceID:   parseUUID(workspaceID),
+			Column3:       uuids,
+		}); err != nil {
+			slog.Warn("link chat-message attachments failed", "error", err, "message_id", uuidToString(msg.ID))
+		}
 	}
 
 	// Enqueue a chat task after the message exists.
