@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, Plus, MoreHorizontal, Settings, Link2, LogOut, ListTodo, Timer, FolderKanban, FolderPlus, Briefcase } from "lucide-react";
+import { ChevronRight, Plus, MoreHorizontal, Settings, Link2, LogOut, ListTodo, Timer, FolderKanban, FolderPlus, Briefcase, Archive, ArchiveRestore } from "lucide-react";
 import {
   DndContext,
   PointerSensor,
@@ -23,7 +23,7 @@ import { useWorkspaceId } from "@multica/core/hooks";
 import { useWorkspacePaths } from "@multica/core/paths";
 import { teamListOptions } from "@multica/core/teams";
 import { projectListOptions } from "@multica/core/projects/queries";
-import { useReorderProjects } from "@multica/core/projects/mutations";
+import { useReorderProjects, useArchiveProject, useUnarchiveProject } from "@multica/core/projects/mutations";
 import { cycleListOptions } from "@multica/core/cycles/queries";
 import type { Project, Team } from "@multica/core/types";
 import { cn } from "@multica/ui/lib/utils";
@@ -43,12 +43,20 @@ function TeamIcon({ team }: { team: Team }) {
 function SortableProjectItem({
   project,
   teamIdentifier,
+  isArchived = false,
 }: {
   project: Project;
   teamIdentifier: string;
+  isArchived?: boolean;
 }) {
   const p = useWorkspacePaths();
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: project.id });
+  const [menuOpen, setMenuOpen] = useState(false);
+  const archiveProject = useArchiveProject();
+  const unarchiveProject = useUnarchiveProject();
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: project.id,
+    disabled: isArchived,
+  });
   const wasDragged = useRef(false);
 
   useEffect(() => {
@@ -64,9 +72,9 @@ function SortableProjectItem({
     <div
       ref={setNodeRef}
       style={style}
-      className={cn(isDragging && "opacity-30")}
-      {...attributes}
-      {...listeners}
+      className={cn("group/project flex items-center gap-1 pr-1", isDragging && "opacity-30")}
+      {...(isArchived ? {} : attributes)}
+      {...(isArchived ? {} : listeners)}
     >
       <AppLink
         href={p.teamProjectDetail(teamIdentifier, project.id)}
@@ -78,14 +86,46 @@ function SortableProjectItem({
           }
         }}
         className={cn(
-          "flex items-center gap-2 rounded-md px-2 py-1 pl-10 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors",
+          "flex flex-1 items-center gap-2 rounded-md px-2 py-1 pl-10 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors",
           isDragging && "pointer-events-none",
+          isArchived && "opacity-60",
         )}
       >
         <Briefcase className="size-3.5 shrink-0 text-muted-foreground" />
         <span className="flex-1 truncate">{project.title}</span>
         <span className="text-xs tabular-nums">{pct}%</span>
       </AppLink>
+      <Popover open={menuOpen} onOpenChange={setMenuOpen}>
+        <PopoverTrigger
+          className="opacity-0 group-hover/project:opacity-100 shrink-0 rounded p-0.5 hover:bg-accent transition-all"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <MoreHorizontal className="size-3.5" />
+        </PopoverTrigger>
+        <PopoverContent className="w-40 p-1" align="end">
+          {isArchived ? (
+            <button
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent transition-colors"
+              onClick={() => {
+                unarchiveProject.mutate(project.id);
+                setMenuOpen(false);
+              }}
+            >
+              <ArchiveRestore className="size-4" /> Unarchive
+            </button>
+          ) : (
+            <button
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent transition-colors"
+              onClick={() => {
+                archiveProject.mutate(project.id);
+                setMenuOpen(false);
+              }}
+            >
+              <Archive className="size-4" /> Archive
+            </button>
+          )}
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }
@@ -94,6 +134,9 @@ function TeamProjectsList({ teamId, teamIdentifier }: { teamId: string; teamIden
   const wsId = useWorkspaceId();
   const { data: allProjects = [] } = useQuery(projectListOptions(wsId));
   const teamProjects = allProjects.filter((proj) => proj.team_id === teamId);
+  const activeProjects = teamProjects.filter((p) => p.archived_at === null);
+  const archivedProjects = teamProjects.filter((p) => p.archived_at !== null);
+  const [archivedExpanded, setArchivedExpanded] = useState(false);
   const reorderProjects = useReorderProjects();
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
@@ -104,27 +147,51 @@ function TeamProjectsList({ teamId, teamIdentifier }: { teamId: string; teamIden
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const oldIndex = teamProjects.findIndex((p) => p.id === active.id);
-    const newIndex = teamProjects.findIndex((p) => p.id === over.id);
+    const oldIndex = activeProjects.findIndex((p) => p.id === active.id);
+    const newIndex = activeProjects.findIndex((p) => p.id === over.id);
     if (oldIndex < 0 || newIndex < 0) return;
-    const reordered = arrayMove(teamProjects, oldIndex, newIndex);
-    // Reuse the team's existing position slots (sorted ascending) and assign
-    // them to the reordered items by index. This keeps positions of other
-    // teams' projects untouched while changing the within-team order.
-    const slots = teamProjects.map((p) => p.position).sort((a, b) => a - b);
+    const reordered = arrayMove(activeProjects, oldIndex, newIndex);
+    const slots = activeProjects.map((p) => p.position).sort((a, b) => a - b);
     const ids = reordered.map((p) => p.id);
     const positions = reordered.map((_, i) => slots[i] ?? i + 1);
     reorderProjects.mutate({ ids, positions });
   };
 
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-      <SortableContext items={teamProjects.map((p) => p.id)} strategy={verticalListSortingStrategy}>
-        {teamProjects.map((proj) => (
-          <SortableProjectItem key={proj.id} project={proj} teamIdentifier={teamIdentifier} />
-        ))}
-      </SortableContext>
-    </DndContext>
+    <div>
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext
+          items={activeProjects.map((p) => p.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          {activeProjects.map((proj) => (
+            <SortableProjectItem key={proj.id} project={proj} teamIdentifier={teamIdentifier} />
+          ))}
+        </SortableContext>
+      </DndContext>
+      {archivedProjects.length > 0 && (
+        <div>
+          <button
+            onClick={() => setArchivedExpanded(!archivedExpanded)}
+            className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 pl-10 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+          >
+            <ChevronRight
+              className={cn("size-3 transition-transform", archivedExpanded && "rotate-90")}
+            />
+            <span>Archived ({archivedProjects.length})</span>
+          </button>
+          {archivedExpanded &&
+            archivedProjects.map((proj) => (
+              <SortableProjectItem
+                key={proj.id}
+                project={proj}
+                teamIdentifier={teamIdentifier}
+                isArchived
+              />
+            ))}
+        </div>
+      )}
+    </div>
   );
 }
 
