@@ -1011,10 +1011,11 @@ export class ApiClient {
   }
 
   // Projects
-  async listProjects(params?: { status?: string; team_id?: string }): Promise<ListProjectsResponse> {
+  async listProjects(params?: { status?: string; team_id?: string; include_archived?: boolean }): Promise<ListProjectsResponse> {
     const search = new URLSearchParams();
     if (params?.status) search.set("status", params.status);
     if (params?.team_id) search.set("team_id", params.team_id);
+    if (params?.include_archived) search.set("include_archived", "true");
     return this.fetch(`/api/projects?${search}`);
   }
 
@@ -1038,6 +1039,14 @@ export class ApiClient {
 
   async deleteProject(id: string): Promise<void> {
     await this.fetch(`/api/projects/${id}`, { method: "DELETE" });
+  }
+
+  async archiveProject(id: string): Promise<Project> {
+    return this.fetch(`/api/projects/${id}/archive`, { method: "POST" });
+  }
+
+  async unarchiveProject(id: string): Promise<Project> {
+    return this.fetch(`/api/projects/${id}/unarchive`, { method: "POST" });
   }
 
   async reorderProjects(ids: string[], positions: number[]): Promise<void> {
