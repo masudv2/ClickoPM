@@ -12,7 +12,12 @@ export const projectKeys = {
 export function projectListOptions(wsId: string, teamId?: string) {
   return queryOptions({
     queryKey: teamId ? [...projectKeys.list(wsId), "team", teamId] : projectKeys.list(wsId),
-    queryFn: () => api.listProjects(teamId ? { team_id: teamId } : undefined),
+    queryFn: () =>
+      api.listProjects(
+        teamId
+          ? { team_id: teamId, include_archived: true }
+          : { include_archived: true },
+      ),
     select: (data) => data.projects,
   });
 }
