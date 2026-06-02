@@ -101,3 +101,59 @@ export function useDeleteProject() {
     },
   });
 }
+
+export function useArchiveProject() {
+  const qc = useQueryClient();
+  const wsId = useWorkspaceId();
+  return useMutation({
+    mutationFn: (id: string) => api.archiveProject(id),
+    onMutate: (id) => {
+      const prevList = qc.getQueryData<ListProjectsResponse>(projectKeys.list(wsId));
+      qc.setQueryData<ListProjectsResponse>(projectKeys.list(wsId), (old) =>
+        old
+          ? {
+              ...old,
+              projects: old.projects.map((p) =>
+                p.id === id ? { ...p, archived_at: new Date().toISOString() } : p,
+              ),
+            }
+          : old,
+      );
+      return { prevList };
+    },
+    onError: (_err, _id, ctx) => {
+      if (ctx?.prevList) qc.setQueryData(projectKeys.list(wsId), ctx.prevList);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: projectKeys.list(wsId) });
+    },
+  });
+}
+
+export function useUnarchiveProject() {
+  const qc = useQueryClient();
+  const wsId = useWorkspaceId();
+  return useMutation({
+    mutationFn: (id: string) => api.unarchiveProject(id),
+    onMutate: (id) => {
+      const prevList = qc.getQueryData<ListProjectsResponse>(projectKeys.list(wsId));
+      qc.setQueryData<ListProjectsResponse>(projectKeys.list(wsId), (old) =>
+        old
+          ? {
+              ...old,
+              projects: old.projects.map((p) =>
+                p.id === id ? { ...p, archived_at: null } : p,
+              ),
+            }
+          : old,
+      );
+      return { prevList };
+    },
+    onError: (_err, _id, ctx) => {
+      if (ctx?.prevList) qc.setQueryData(projectKeys.list(wsId), ctx.prevList);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: projectKeys.list(wsId) });
+    },
+  });
+}
